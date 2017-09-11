@@ -1,17 +1,52 @@
 import os
-import re
 import numpy as np
 import subprocess
 from multiprocessing import Pool
 import sys
-
-sys.path.append('D:\\software\\wxpython\\wx-3.0-msw')
-from gooey import Gooey, GooeyParser
-
-# import pyopenms as oms
-
 import re
+import getopt
 from pyteomics import mzml
+from functools import partial
+
+
+def read_cmdline():
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], '', ['input=', 'outpath=', 'nthr=', 'split_acq='])
+    except getopt.GetoptError:
+        print('preprocessing.py --input <folder or single file to process> '
+              '--outpath <directory for output, default is separate folder in input directory> '
+              '--nthreads <number of threads to use, default 2> ' +
+              '--split_acq <write separate files for each fragmentation method, default false>')
+        sys.exit()
+    # default values
+    nthr = 2
+    split_acq = False
+
+    for opt, arg in opts:
+        if opt == '--input':
+            input_arg = arg
+        elif opt == '--nthr':
+            nthr = int(arg)
+        elif opt == '--outpath':
+            outdir = arg
+        elif opt == '--split_acq':
+            split_acq = bool(arg)
+        elif opt == '--mscon_settings':
+            mscon_settings = arg
+
+    if 'input_arg' not in locals():
+        print('preprocessing.py --input <folder or single file to process> '
+              '--outpath <directory for output, default is separate folder in input directory> '
+              '--nthreads <number of threads to use, default 2> ' +
+              '--split_acq <write separate files for each fragmentation method, default false>')
+        sys.exit()
+    # if no outdir defined use location of input
+    if 'outdir' not in locals() and os.path.isdir(input_arg):
+        outdir = os.path.join(input_arg, 'processed')
+    elif 'outdir' not in locals() and not os.path.isdir(input_arg):
+        outdir = os.path.join(os.path.split(input_arg)[0], 'processed')
+
+    return input_arg, nthr, outdir, split_acq
 
 
 def split_mzml(mzml_file):
@@ -40,7 +75,8 @@ def split_mzml(mzml_file):
     for spectrum in mzml_reader:
         if spectrum['ms level'] == 2:
             try:
-                groups = re.search("@([A-z]+)([0-9.]+)@?([A-z]+)?([0-9.]+)?", spectrum['scanList']['scan'][0]['filter string']).groups()
+                groups = re.search("@([A-z]+)([0-9.]+)@?([A-z]+)?([0-9.]+)?",
+                                   spectrum['scanList']['scan'][0]['filter string']).groups()
             except:
                 print spectrum['scanList']['scan'][0]['filter string']
             title = os.path.split(mzml_file)[1].split('mzML')[0] + spectrum['id']
@@ -93,6 +129,7 @@ class MS2_spectrum():
                 charge array for the peaks
 
     """
+
     def __init__(self, title, RT, pepmass, pepint, charge, peaks, peakcharge=[]):
         self.title = title
         self.RT = RT
@@ -106,52 +143,52 @@ class MS2_spectrum():
         """
         Returns the precursor mass
         """
-        return(self.pepmass)
+        return (self.pepmass)
 
     def getPrecursorIntensity(self):
         """
         Returns the precursor mass
         """
-        return(self.pepint)
+        return (self.pepint)
 
     def getRT(self):
         """
         Returns the precursor mass
         """
-        return(self.RT)
+        return (self.RT)
 
     def getTitle(self):
         """
         Returns the precursor mass
         """
-        return(self.title)
+        return (self.title)
 
     def getPeaks(self):
         """
         Returns the precursor mass
         """
-        return(self.peaks)
+        return (self.peaks)
 
     def getMasses(self):
         """
         TODO:
         Returns the precursor mass
         """
-        return(self.peaks[:,0])
+        return (self.peaks[:, 0])
 
     def getIntensities(self):
         """
         TODO:
         Returns the precursor mass
         """
-        return(self.peaks[:,1])
+        return (self.peaks[:, 1])
 
     def getUnchargedMass(self):
         """
         Computs the uncharged mass of a fragment:
         uncharged_mass = (mz * z ) - z
         """
-        return( (self.pepmass * self.charge) -  self.charge)
+        return ((self.pepmass * self.charge) - self.charge)
 
     def printf(self):
         print ("Title, RT, PEPMASS, PEPINT, CHARGE")
@@ -160,8 +197,8 @@ class MS2_spectrum():
     def to_mgf(self):
         # need dummy values in case no peak charges are in the data
         if len(self.peakcharge) == 0:
-            self.peakcharge = [""]*self.peaks.shape[0]
-        mgf_str="""
+            self.peakcharge = [""] * self.peaks.shape[0]
+        mgf_str = """
 BEGIN IONS
 TITLE=%s
 RTINSECONDS=%s
@@ -169,12 +206,14 @@ PEPMASS=%s %s
 CHARGE=%s
 %s
 END IONS
-        """ % (self.title, self.RT, self.pepmass, self.pepint, self.charge, "\r\n".join(["%s %s %s" % (i[0], i[1], j, ) for i,j in zip(self.peaks, self.peakcharge)]))
-        return(mgf_str)
+        """ % (self.title, self.RT, self.pepmass, self.pepint, self.charge,
+               "\r\n".join(["%s %s %s" % (i[0], i[1], j,) for i, j in zip(self.peaks, self.peakcharge)]))
+        return (mgf_str)
 
-#==============================================================================
+
+# ==============================================================================
 # File Reader
-#==============================================================================
+# ==============================================================================
 class MGF_Reader():
     """A MGF_Reader is associated with a FASTA file or an open connection
     to a file-like object with content in FASTA format.
@@ -187,6 +226,7 @@ class MGF_Reader():
     >>#do something \r\n
     >>reader.store(outfile, outspectra) \r\n
     """
+
     def load(self, infile, getpeakcharge=False):
         """
         Function to set the input file for the MGF file.
@@ -209,7 +249,7 @@ class MGF_Reader():
             if len(line.strip()) == 0:
                 continue
             if line.startswith("BEGIN IONS"):
-               # init arrays for peaks
+                # init arrays for peaks
                 found_ions = True
                 mass = []
                 intensity = []
@@ -243,79 +283,15 @@ class MGF_Reader():
                     mass.append(float(peak[0]))
                     intensity.append(float(peak[1]))
                     if self.peakcharge:
-                        if len(peak) >2:
+                        if len(peak) > 2:
                             peakcharge.append(peak[2])
 
 
-def add_relaxation_mgf(args):
-    # mgf_file, outdir, differences = argls[0], argls[1], argls[2]
-    mass_diff = 1.00335483
-    if '.mgf' in args['file']:
-        filename = os.path.split(args['file'])[1].replace('mzML', 'mgf')
-        # read mgf
-        spectra = MGF_Reader()
-        spectra.load(args['mgffile'])
-        out_writer = open(os.path.join(args['outdir'], filename), "w")
-        for spectrum in spectra:
-            # calculate mass (neglect proton bec. later on difference used)
-            mass = spectrum.getPrecursorMass() * spectrum.charge
-            spectra_add_mip = [str((mass + x * mass_diff) / spectrum.charge) for x in args['differences']]
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={}
-CHARGE={}+
-RTINSECONDS={}
-ADDITIONALMZ={}
-{}
-END IONS     """.format(spectrum.getTitle(),
-                                spectrum.getPrecursorMass(),
-                                int(spectrum.charge), spectrum.getRT(),
-                                ';'.join(spectra_add_mip),
-                                "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks]))
-            out_writer.write(stavrox_mgf)
+def mscon_cmd(filepath, outdir, settings, mgf):
+    filename = os.path.split(filepath)[1]
 
-    else:
-        # read mzml, sort spectra into acquisition modes
-        # output as MS2spectrum object
-        splitted_spectra = split_mzml(args['file'])
-        orig_name = os.path.split(args['file'])[1].replace('mzML', 'mgf')
-
-        for acq in splitted_spectra:
-            filename = acq + '_' + orig_name
-            # add line to info
-            # iterate over spectra and write MGF to new file
-            out_writer = open(os.path.join(args['outdir'], filename), "w")
-            for spectrum in splitted_spectra[acq]:
-                # calculate mass (neglect proton bec. later on difference used)
-                mass = spectrum.getPrecursorMass() * spectrum.charge
-                spectra_add_mip = [str((mass + x * mass_diff) / spectrum.charge) for x in args['differences']]
-                stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={}
-CHARGE={}+
-RTINSECONDS={}
-ADDITIONALMZ={}
-{}
-END IONS     """.format(spectrum.getTitle(),
-                                        spectrum.getPrecursorMass(),
-                                        int(spectrum.charge), spectrum.getRT(),
-                                        ';'.join(spectra_add_mip),
-                                        "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks]))
-                out_writer.write(stavrox_mgf)
-
-
-def mscon_cmd(rawdir, outdir, settings, mgf):
-    # create list with all files in directory
-    files_list = os.listdir(rawdir)
-
-    # subselect all raw files and join to full path
-    raw_files_list = [x for x in files_list if '.' in x]
-    raw_files_list = [os.path.join(rawdir, x) for x in raw_files_list
-                      if not x in os.listdir(outdir)] #.replace('raw', 'mzML')
+    if (filename[:filename.rfind('.')] in [x[:x.rfind('.')] for x in os.listdir(outdir)]) or (os.path.isdir(filepath)):
+        return []
 
     filter_formatted = []
     for i in range(len(settings)):
@@ -323,58 +299,72 @@ def mscon_cmd(rawdir, outdir, settings, mgf):
         filter_formatted.append(settings[i])
 
     if mgf:
-        cmd_list = [[rawfile, '--mgf', '-o', outdir] + filter_formatted for rawfile in raw_files_list]
+        cmd_list = [filepath, '--mgf', '-o', outdir] + filter_formatted
     else:
-        cmd_list = [[rawfile, '-o', outdir] + filter_formatted for rawfile in raw_files_list]
-
+        cmd_list = [filepath, '-o', outdir] + filter_formatted
+    # TODO modify title via msconvert
     return cmd_list
 
 
-def mscon_wrap(cmds):
-    mscon = ['C:\\Program Files\\ProteoWizard\\ProteoWizard 3.0.9740\\msconvert.exe']
-    convert = subprocess.Popen(mscon + cmds)
-    convert.communicate()
+def write_mgf(spectra, outfile):
+    out_writer = open(os.path.join(outfile), "w")
+    for spectrum in spectra:
+        stavrox_mgf = """
+MASS=Monoisotopic
+BEGIN IONS
+TITLE={}
+PEPMASS={}
+CHARGE={}+
+RTINSECONDS={}
+{}
+END IONS     """.format(spectrum.getTitle(),
+                            spectrum.getPrecursorMass(),
+                            int(spectrum.charge), spectrum.getRT(),
+                            "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks]))
+        out_writer.write(stavrox_mgf)
 
 
-def main():
-    raw_dir = 'D:/user/Swantje/Lars' #'//130.149.167.198/rappsilbergroup/users/lswantje/Lars'
-    split_acq = True
-    nthr = 2
+def process_file(filepath, outdir, mscon_settings, split_acq, mscon_exe):
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
 
-    # MS2 peak filtering - can be left like this
-    mscon_settings = ["MS2Denoise 20 100 false"] #
+    conv_cmds = mscon_cmd(filepath=filepath, outdir=outdir, settings=mscon_settings, mgf=not split_acq)
 
-    # monoisotopic shifts to add - can also be left like this (exact mass difference is set in function)
-    # up to -3 Da led to 5% more PSMs for ribo data set - might be worth it, since it doesn't increase search time much
-    da_range = [-1, -2, -3]
-
-    filt_dir = os.path.join(raw_dir, 'preprocessed', 'mgf_filtered')
-    rel_dir = os.path.join(raw_dir, 'preprocessed', 'relaxed')
-
-    if not os.path.exists(filt_dir):
-        os.makedirs(filt_dir)
+    if len(conv_cmds) > 0:
+        msconvert = subprocess.Popen([mscon_exe] + conv_cmds)
+        msconvert.communicate()
 
     if split_acq:
-        conv_cmds = mscon_cmd(rawdir=raw_dir, outdir=filt_dir, settings=mscon_settings, mgf=False)
-    else:
-        conv_cmds = mscon_cmd(rawdir=raw_dir, outdir=filt_dir, settings=mscon_settings, mgf=True)
+        filename = os.path.split(filepath)[1]
+        mzml_file = os.path.join(outdir, filename[:filename.rfind('.')]+'.mzML')
+        splitted_spectra = split_mzml(mzml_file)
 
-    pool = Pool(processes=nthr)
-    pool.map(mscon_wrap, conv_cmds)
-    pool.close()
-    pool.join()
-    print 'msconvert finished'
-
-    if not os.path.exists(rel_dir):
-        os.makedirs(rel_dir)
-
-    relaxation_arg = [{'file': os.path.join(filt_dir, f), 'outdir': rel_dir, 'differences': da_range} for f in os.listdir(filt_dir)]
-    pool = Pool(processes=nthr)
-    pool.map(add_relaxation_mgf, relaxation_arg)
-    pool.close()
-    pool.join()
-    print 'relaxation added'
+        for acq in splitted_spectra:
+            write_mgf(spectra=splitted_spectra[acq],
+                      outfile=os.path.join(outdir, acq + '_' + os.path.split(mzml_file)[1]))
 
 
 if __name__ == '__main__':
-    main()
+    # location of msconvert exe
+    mscon = 'C:\\Program Files\\ProteoWizard\\ProteoWizard 3.0.9740\\msconvert.exe'
+    # msconvert options (list of strings), best to leave it like this
+    mscon_settings = ["MS2Denoise 20 100 false"]
+
+    # read cmdline arguments / get deafult values
+    input_arg, nthr, outdir, split_acq = read_cmdline()
+    # execfile(config_path)
+
+    # get files in directory
+    if os.path.isdir(input_arg):
+        full_paths = [os.path.join(input_arg, rawfile) for rawfile in os.listdir(input_arg)]
+        full_paths = [x for x in full_paths if not os.path.isdir(x)]
+    # if single file given reformat to list
+    # TODO allow txt file with filepath
+    else:
+        full_paths = [input_arg]
+
+    pool = Pool(processes=nthr)
+    pool.map(partial(process_file, outdir=outdir, mscon_settings=mscon_settings, split_acq=split_acq, mscon_exe=mscon),
+             full_paths)
+    pool.close()
+    pool.join()
