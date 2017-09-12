@@ -11,34 +11,25 @@ from functools import partial
 
 def read_cmdline():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], '', ['input=', 'outpath=', 'nthr=', 'split_acq='])
+        opts, args = getopt.getopt(sys.argv[1:], '', ['input=', 'config=', 'outpath='])
     except getopt.GetoptError:
         print('preprocessing.py --input <folder or single file to process> '
               '--outpath <directory for output, default is separate folder in input directory> '
-              '--nthreads <number of threads to use, default 2> ' +
-              '--split_acq <write separate files for each fragmentation method, default false>')
+              '--config <path to config file>')
         sys.exit()
-    # default values
-    nthr = 2
-    split_acq = False
 
     for opt, arg in opts:
         if opt == '--input':
             input_arg = arg
-        elif opt == '--nthr':
-            nthr = int(arg)
         elif opt == '--outpath':
             outdir = arg
-        elif opt == '--split_acq':
-            split_acq = bool(arg)
-        elif opt == '--mscon_settings':
-            mscon_settings = arg
+        elif opt == '--config':
+            config = arg
 
-    if 'input_arg' not in locals():
+    if 'input_arg' not in locals() or 'config' not in locals():
         print('preprocessing.py --input <folder or single file to process> '
               '--outpath <directory for output, default is separate folder in input directory> '
-              '--nthreads <number of threads to use, default 2> ' +
-              '--split_acq <write separate files for each fragmentation method, default false>')
+              '--config <path to config file>')
         sys.exit()
     # if no outdir defined use location of input
     if 'outdir' not in locals() and os.path.isdir(input_arg):
@@ -46,7 +37,7 @@ def read_cmdline():
     elif 'outdir' not in locals() and not os.path.isdir(input_arg):
         outdir = os.path.join(os.path.split(input_arg)[0], 'processed')
 
-    return input_arg, nthr, outdir, split_acq
+    return input_arg, outdir, config
 
 
 def split_mzml(mzml_file):
@@ -345,14 +336,9 @@ def process_file(filepath, outdir, mscon_settings, split_acq, mscon_exe):
 
 
 if __name__ == '__main__':
-    # location of msconvert exe
-    mscon = 'C:\\Program Files\\ProteoWizard\\ProteoWizard 3.0.9740\\msconvert.exe'
-    # msconvert options (list of strings), best to leave it like this
-    mscon_settings = ["MS2Denoise 20 100 false"]
-
     # read cmdline arguments / get deafult values
-    input_arg, nthr, outdir, split_acq = read_cmdline()
-    # execfile(config_path)
+    input_arg, outdir, config_path = read_cmdline()
+    execfile(config_path)
 
     # get files in directory
     if os.path.isdir(input_arg):
@@ -364,7 +350,7 @@ if __name__ == '__main__':
         full_paths = [input_arg]
 
     pool = Pool(processes=nthr)
-    pool.map(partial(process_file, outdir=outdir, mscon_settings=mscon_settings, split_acq=split_acq, mscon_exe=mscon),
-             full_paths)
+    pool.map(partial(process_file, outdir=outdir, mscon_settings=mscon_settings, split_acq=split_acq,
+                     mscon_exe=msconvert_exe), full_paths)
     pool.close()
     pool.join()
