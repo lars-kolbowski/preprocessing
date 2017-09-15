@@ -40,7 +40,7 @@ def read_cmdline():
     return input_arg, outdir, config
 
 
-def split_mzml(mzml_file):
+def split_mzml(mzml_file, detector="all"):
     """
     function to split a mzML file into dict of MS2_Spectra objects (can be written to mgf format)
     by fragmentation method
@@ -60,17 +60,26 @@ def split_mzml(mzml_file):
         "HCD": [],
         "ETD": [],
         "ETciD": [],
-        "EThcD": []
+        "EThcD": [],
+        "unknown": []
     }
 
+    n = 0
     for spectrum in mzml_reader:
         if spectrum['ms level'] == 2:
+            n += 1
+            filter_str = spectrum['scanList']['scan'][0]['filter string']
             try:
-                groups = re.search("@([A-z]+)([0-9.]+)@?([A-z]+)?([0-9.]+)?",
-                                   spectrum['scanList']['scan'][0]['filter string']).groups()
-            except:
-                print spectrum['scanList']['scan'][0]['filter string']
-            title = os.path.split(mzml_file)[1].split('mzML')[0] + spectrum['id']
+                detector_str = re.search("^(FT|IT)", filter_str).groups()[0]
+                frag_groups = re.findall("@([A-z]+)([0-9.]+)", filter_str)
+            except AttributeError:
+                raise StandardError("filter string parse error: %s" % filter_str)
+
+            if not detector == "all":
+                if not detector == detector_str:
+                    continue
+
+            title = os.path.split(mzml_file)[1].split('.mzML')[0] + " " + spectrum['id']
             rt = spectrum['scanList']['scan'][0]['scan start time'] * 60
             precursor = spectrum['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]
             pre_mz = precursor['selected ion m/z']
@@ -83,17 +92,23 @@ def split_mzml(mzml_file):
 
             ms2class_spectrum = MS2_spectrum(title, rt, pre_mz, pre_int, pre_z, peaks)
 
-            if "etd" in groups:
-                if "cid" in groups:
+            frag_methods = [f[0] for f in frag_groups]
+
+            if "etd" in frag_methods:
+                if "cid" in frag_methods:
                     ordered_ms2_spectra['ETciD'].append(ms2class_spectrum)
-                elif "hcd" in groups:
+                elif "hcd" in frag_methods:
                     ordered_ms2_spectra['EThcD'].append(ms2class_spectrum)
                 else:
                     ordered_ms2_spectra['ETD'].append(ms2class_spectrum)
-            elif "cid" in groups:
+            elif "cid" in frag_methods:
                 ordered_ms2_spectra['CID'].append(ms2class_spectrum)
-            elif "hcd" in groups:
+            elif "hcd" in frag_methods:
                 ordered_ms2_spectra['HCD'].append(ms2class_spectrum)
+            else:
+                ordered_ms2_spectra['unknown'].append(ms2class_spectrum)
+    if len(ordered_ms2_spectra['unknown']) > 0:
+        raise Warning("The fragmentation method of %i spectra could not be identified" % len(ordered_ms2_spectra['unkown']))
 
     return {k: v for k, v in ordered_ms2_spectra.items() if len(v) > 0}
 
@@ -311,11 +326,11 @@ RTINSECONDS={}
 END IONS     """.format(spectrum.getTitle(),
                             spectrum.getPrecursorMass(),
                             int(spectrum.charge), spectrum.getRT(),
-                            "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks]))
+                            "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
         out_writer.write(stavrox_mgf)
 
 
-def process_file(filepath, outdir, mscon_settings, split_acq, mscon_exe):
+def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe):
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -328,7 +343,7 @@ def process_file(filepath, outdir, mscon_settings, split_acq, mscon_exe):
     if split_acq:
         filename = os.path.split(filepath)[1]
         mzml_file = os.path.join(outdir, filename[:filename.rfind('.')]+'.mzML')
-        splitted_spectra = split_mzml(mzml_file)
+        splitted_spectra = split_mzml(mzml_file, detector_filter)
 
         for acq in splitted_spectra:
             write_mgf(spectra=splitted_spectra[acq],
@@ -351,6 +366,6 @@ if __name__ == '__main__':
 
     pool = Pool(processes=nthr)
     pool.map(partial(process_file, outdir=outdir, mscon_settings=mscon_settings, split_acq=split_acq,
-                     mscon_exe=msconvert_exe), full_paths)
+                     detector_filter=detector_filter, mscon_exe=msconvert_exe), full_paths)
     pool.close()
     pool.join()
