@@ -347,7 +347,7 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
 
         for acq in splitted_spectra:
             write_mgf(spectra=splitted_spectra[acq],
-                      outfile=os.path.join(outdir, acq + '_' + os.path.split(mzml_file)[1]))
+                      outfile=os.path.join(outdir, acq + '_' + filename[:filename.rfind('.')]+'.mgf'))
 
 
 if __name__ == '__main__':
