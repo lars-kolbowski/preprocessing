@@ -297,6 +297,7 @@ def mscon_cmd(filepath, outdir, settings, mgf):
     filename = os.path.split(filepath)[1]
 
     if (filename[:filename.rfind('.')] in [x[:x.rfind('.')] for x in os.listdir(outdir)]) or (os.path.isdir(filepath)):
+        print('File ' + filename + ' already existing in output directory, not done again.')
         return []
 
     filter_formatted = []
@@ -353,7 +354,10 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
 if __name__ == '__main__':
     # read cmdline arguments / get deafult values
     input_arg, outdir, config_path = read_cmdline()
-    execfile(config_path)
+    try:
+        execfile(config_path)
+    except NameError:
+        exec(open(config_path).read())
 
     # get files in directory
     if os.path.isdir(input_arg):
@@ -363,6 +367,10 @@ if __name__ == '__main__':
     # TODO allow txt file with filepath
     else:
         full_paths = [input_arg]
+
+    print("""file input:
+{}
+""".format('\n'.join(full_paths)))
 
     pool = Pool(processes=nthr)
     pool.map(partial(process_file, outdir=outdir, mscon_settings=mscon_settings, split_acq=split_acq,
