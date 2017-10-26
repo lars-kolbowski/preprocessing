@@ -94,6 +94,18 @@ class Deisotoper():
 
         #TODO:
         #think about a useful class & parameter handling.
+        
+        
+        Usage:
+        -------------------------------
+        Usage is very simple but limited to MGFs at the moment.
+        
+            >>> import Deisotoper as DE
+            >>> infile = "data/test.mgf"
+            >>> dt = DE.Deisotoper()
+            >>> deisotoped_spectra = dt.deisotope_spectra(infile, 
+                                                          show_progress=True,
+                                                          n_jobs=-1)
         """
         self.ppm_tolerance = ppm_tolerance
         self.min_score = min_score
