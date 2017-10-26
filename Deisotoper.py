@@ -81,23 +81,29 @@ class Deisotoper():
     """
     Description.
     """
-    def __init__(self):
+    def __init__(self, ppm_tolerance=20, min_score=0.6, min_charge=1, max_charge=7,
+                 min_abundance=0.25, min_improve=0.3, verbose=False):
         """
         Initializes the Deisotoper class.
 
         :param ppm: Maximum deviation in ppm error from an expected m/z to the measured m/z.
         :param allow_ambiguous: Allows the addition of ambiguous charge states.
         :param min_score:  Minimum score for keeping isotope clusters.
-        :param min_peaks: Minimum number of peaks in an isotope clusters.
         :param min_charge: Int, minimum charge
         :param max_charge: Int, maximum charge stte
 
         #TODO:
         #think about a useful class & parameter handling.
         """
-        pass
+        self.ppm_tolerance = ppm_tolerance
+        self.min_score = min_score
+        self.min_charge = min_charge
+        self.max_charge = max_charge
+        self.min_abundance = min_abundance
+        self.min_improve = min_improve
+        self.verbose = verbose
 
-
+    
     def parallel_helper(self, spectrum, return_type, show_progress=False,
                         ndone=-1):
             """
@@ -110,19 +116,24 @@ class Deisotoper():
                          dataframe and spectrum a full featured mgf
                          with charge annotation.
             """
-            if ndone % 50 == 0:
+            if ndone % 5000 == 0:
                 print("{} spectra done".format(ndone))
             mz = spectrum.getMZ()
             intensity = spectrum.getIntensities()
             
             #create graph
-            G = self.spec2graph(mz, intensity)
+            G = self.spec2graph(mz, intensity, self.ppm_tolerance,
+                                self.min_charge, self.max_charge)
             
             #extract all path with possible isotope clusters
-            cluster_ar = self.extract_isotope_cluster(G, verbose=False)
+            cluster_ar = self.extract_isotope_cluster(G, verbose=self.verbose)
             
             #resolve ambiguous cluster with scoring
-            cluster_res = self.resolve_ambiguous(cluster_ar, mz, intensity)
+            cluster_res = self.resolve_ambiguous(cluster_ar, mz, intensity,
+                                                 min_score=self.min_score,
+                                                 min_abundance=self.min_abundance,
+                                                 min_improve=self.min_improve,
+                                                 verbose=self.verbose)
             
             #write results to dataframe
             cluster_df = self.assemble_spectrum(cluster_res, mz, intensity, 
@@ -581,7 +592,11 @@ class Deisotoper():
         
     
 
+infile = "data/mscon_PF_20_100_0_B160803_02.mgf"
 
+deisotoper = Deisotoper()
+deisotoped_spectra = deisotoper.deisotope_spectra(infile, show_progress=True,
+                                                  n_jobs=-1)
 
 import sys
 sys.exit()
@@ -596,7 +611,7 @@ def test():
 
     deisotoper = Deisotoper()
     deisotoped_spectra = deisotoper.deisotope_spectra(infile, show_progress=True,
-                                                      n_jobs=1)
+                                                      n_jobs=-1)
 
     #%%
     spectrum = pd.read_csv("data/test.dta2d", sep="\t")
