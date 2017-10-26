@@ -5,6 +5,7 @@ import time
 import matplotlib.pyplot as plt
 from sklearn.linear_model import Lasso
 from joblib import Parallel, delayed
+import sys
 
 #package modules
 import AveragineModel as AM
@@ -168,8 +169,8 @@ class Deisotoper():
         if in_type=="MGF":
             MGF_file = PFR.MGF_Reader()
             MGF_file.load(infile)
-            for spectrum in MGF_file:
-                results_store = Parallel(n_jobs=n_jobs)\
+            
+            results_store = Parallel(n_jobs=n_jobs)\
                 (delayed(self.parallel_helper)(spectrum, return_type, show_progress, ii) for ii, spectrum in enumerate(MGF_file))
         
         else:
