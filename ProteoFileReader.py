@@ -11,7 +11,21 @@ Created on Wed Sep 17 14:08:39 2014
 #==============================================================================
 import re
 import numpy as np
+import pyopenms as oms
 
+def mzMLReader(in_file):
+    """
+    One line wrapper for OpenMS mzML reading. Returns the "exp" of a file.
+    
+    Parameters:
+    -----------------------
+    in_file: str, 
+              location of the mzML file.
+    """
+    file = oms.MzMLFile()
+    exp = oms.MSExperiment()
+    file.load(in_file, exp)
+    return(exp)
 
 class MS2_spectrum():
     """
@@ -52,13 +66,13 @@ class MS2_spectrum():
 
     def getPrecursorIntensity(self):
         """
-        Returns the precursor mass
+        Returns the precursor intensity
         """
         return(self.pepint)
 
     def getRT(self):
         """
-        Returns the precursor mass
+        Returns the precursor RT
         """
         return(self.RT)
 
@@ -70,21 +84,19 @@ class MS2_spectrum():
 
     def getPeaks(self):
         """
-        Returns the precursor mass
+        Returns the spectrum peaks
         """
         return(self.peaks)
 
-    def getMasses(self):
+    def getMZ(self):
         """
-        TODO:
-        Returns the precursor mass
+        Returns the mz of the MS2
         """
         return(self.peaks[:,0])
 
     def getIntensities(self):
         """
-        TODO:
-        Returns the precursor mass
+        Returns the MS2 peak intensities
         """
         return(self.peaks[:,1])
 
@@ -92,6 +104,7 @@ class MS2_spectrum():
         """
         Computs the uncharged mass of a fragment:
         uncharged_mass = (mz * z ) - z
+        TODO: fix Hydrogen mass!
         """
         return( (self.pepmass * self.charge) -  self.charge)
 
@@ -177,7 +190,7 @@ class MGF_Reader():
                 print ("unhandled paramter: %s" % (line))
 
             elif line.startswith("END IONS"):
-                ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array(zip(mass, intensity)), peakcharge)
+                ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array([mass, intensity]).transpose(), peakcharge)
                 yield ms
             else:
                 if found_ions is True:
