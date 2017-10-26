@@ -11,7 +11,21 @@ Created on Wed Sep 17 14:08:39 2014
 #==============================================================================
 import re
 import numpy as np
+import pyopenms as oms
 
+def mzMLReader(in_file):
+    """
+    One line wrapper for OpenMS mzML reading. Returns the "exp" of a file.
+    
+    Parameters:
+    -----------------------
+    in_file: str, 
+              location of the mzML file.
+    """
+    file = oms.MzMLFile()
+    exp = oms.MSExperiment()
+    file.load(in_file, exp)
+    return(exp)
 
 class MS2_spectrum():
     """
@@ -38,27 +52,27 @@ class MS2_spectrum():
     def __init__(self, title, RT, pepmass, pepint, charge, peaks, peakcharge=[]):
         self.title = title
         self.RT = RT
-        self.pepmass = pepmass
+        self.pepmz = pepmass
         self.pepint = pepint
         self.charge = charge
         self.peaks = peaks
         self.peakcharge = peakcharge
 
-    def getPrecursorMass(self):
+    def getPrecursorMZ(self):
         """
         Returns the precursor mass
         """
-        return(self.pepmass)
+        return(self.pepmz)
 
     def getPrecursorIntensity(self):
         """
-        Returns the precursor mass
+        Returns the precursor intensity
         """
         return(self.pepint)
 
     def getRT(self):
         """
-        Returns the precursor mass
+        Returns the precursor RT
         """
         return(self.RT)
 
@@ -70,21 +84,19 @@ class MS2_spectrum():
 
     def getPeaks(self):
         """
-        Returns the precursor mass
+        Returns the spectrum peaks
         """
         return(self.peaks)
 
-    def getMasses(self):
+    def getMZ(self):
         """
-        TODO:
-        Returns the precursor mass
+        Returns the mz of the MS2
         """
         return(self.peaks[:,0])
 
     def getIntensities(self):
         """
-        TODO:
-        Returns the precursor mass
+        Returns the MS2 peak intensities
         """
         return(self.peaks[:,1])
 
@@ -92,12 +104,13 @@ class MS2_spectrum():
         """
         Computs the uncharged mass of a fragment:
         uncharged_mass = (mz * z ) - z
+        TODO: fix Hydrogen mass!
         """
         return( (self.pepmass * self.charge) -  self.charge)
 
     def printf(self):
         print ("Title, RT, PEPMASS, PEPINT, CHARGE")
-        print (self.title, self.RT, self.pepmass, self.pepint, self.charge)
+        print (self.title, self.RT, self.pepmz, self.pepint, self.charge)
 
     def to_mgf(self):
         # need dummy values in case no peak charges are in the data
@@ -111,7 +124,7 @@ PEPMASS=%s %s
 CHARGE=%s
 %s
 END IONS
-        """ % (self.title, self.RT, self.pepmass, self.pepint, self.charge, "\r\n".join(["%s %s %s" % (i[0], i[1], j, ) for i,j in zip(self.peaks, self.peakcharge)]))
+        """ % (self.title, self.RT, self.pepmz, self.pepint, self.charge, "\r\n".join(["%s %s %s" % (i[0], i[1], j, ) for i,j in zip(self.peaks, self.peakcharge)]))
         return(mgf_str)
 
 #==============================================================================
@@ -177,7 +190,7 @@ class MGF_Reader():
                 print ("unhandled paramter: %s" % (line))
 
             elif line.startswith("END IONS"):
-                ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array(zip(mass, intensity)), peakcharge)
+                ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array([mass, intensity]).transpose(), peakcharge)
                 yield ms
             else:
                 if found_ions is True:
