@@ -52,17 +52,17 @@ class MS2_spectrum():
     def __init__(self, title, RT, pepmass, pepint, charge, peaks, peakcharge=[]):
         self.title = title
         self.RT = RT
-        self.pepmass = pepmass
+        self.pepmz = pepmass
         self.pepint = pepint
         self.charge = charge
         self.peaks = peaks
         self.peakcharge = peakcharge
 
-    def getPrecursorMass(self):
+    def getPrecursorMZ(self):
         """
         Returns the precursor mass
         """
-        return(self.pepmass)
+        return(self.pepmz)
 
     def getPrecursorIntensity(self):
         """
