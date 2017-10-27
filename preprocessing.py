@@ -144,10 +144,10 @@ PEPMASS={} {}
 CHARGE={}+
 RTINSECONDS={}
 {}
-END IONS     """.format(spectrum.getTitle(),
-                            spectrum.getPrecursorMass(), spectrum.getPrecursorIntensity(),
-                            int(spectrum.charge), spectrum.getRT(),
-                            "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+END IONS     """.format(spectrum.getTitle(), spectrum.getPrecursorMass(),
+                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                        int(spectrum.charge), spectrum.getRT(),
+                        "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
         out_writer.write(stavrox_mgf)
 
 
