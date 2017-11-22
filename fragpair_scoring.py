@@ -76,7 +76,7 @@ def score_masses(possible_masses, paired_masses, ms2err):
         resdiff = np.abs(mass - isotope_peak)
         res_err = resdiff / isotope_peak *10**6
 
-        score = [inten[i]**2 for i in range(len(res_err)) if res_err[i] <= ms2err]
+        score = [inten[i] for i in range(len(res_err)) if res_err[i] <= ms2err]
         count += [sum(score)]
     return count
 
@@ -88,7 +88,15 @@ def precursor_matches(spec, ms2err, df=False):
 
     """
     if not df:
-        scan = spec.getTitle().split('.')[-2]
+        regex_match = re.search('(scan=)[0-9]*', spec.getTitle())
+        if regex_match is not None:
+            scan = regex_match.group(0).split('scan=')[1]
+        else:
+            scan = spec.getTitle().split('.')[-2]
+        # scan = re.search('(scan=)[0-9]*', spec.getTitle()).group(0)
+        # raw_input(scan)
+        if int(scan) % 1000 == 0:
+            print scan
         prec_charge = spec.charge
         prec_mz = spec.pepmass
         prec_mass = (prec_charge * prec_mz) - prec_charge*proton
@@ -145,7 +153,7 @@ if __name__ == '__main__':
     file_prefix = 'B160803_02_'
 
     prec_infos = pd.DataFrame.from_csv(base_dir + './prec_infos.csv')
-    hits_mip = prec_infos['Xi_mip']
+    hits_mip = prec_infos[['Xi_mip', 'Xi_hit', 'mass_raw']]
     ms2_tol = 10
 
     exp = ProteoFileReader.MGF_Reader()

@@ -136,6 +136,8 @@ def mscon_cmd(filepath, outdir, settings, mgf):
 def write_mgf(spectra, outfile):
     out_writer = open(os.path.join(outfile), "w")
     for spectrum in spectra:
+        title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
         stavrox_mgf = """
 MASS=Monoisotopic
 BEGIN IONS
@@ -144,7 +146,8 @@ PEPMASS={} {}
 CHARGE={}+
 RTINSECONDS={}
 {}
-END IONS     """.format(spectrum.getTitle(), spectrum.getPrecursorMass(),
+END IONS     """.format('.'.join([title, scan, scan, str(int(spectrum.charge))]),
+                        spectrum.getPrecursorMass(),
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
                         int(spectrum.charge), spectrum.getRT(),
                         "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
