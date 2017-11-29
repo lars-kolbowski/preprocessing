@@ -16,6 +16,19 @@ H_MASS = 1.007276466583
 CA_DISTANCE = 1.0033548378
 
 
+def mz_to_df(mz, intensity, min_idx=0, max_idx=-1):
+    """
+    Given MZ and Intensity returns a dataframe.
+    """
+    df = pd.DataFrame()
+    df["mz"] = mz
+    df["intensity"] = intensity
+    if max_idx == -1:
+        max_idx = df.shape[0]
+    df_filt = df.iloc[min_idx:max_idx]
+    df_filt.to_clipboard(sep="\t", index=False, header=False)
+    return(df_filt)
+
 def plot_G(G):
     """
 
@@ -131,30 +144,42 @@ class Deisotoper():
             """
             if ndone % 5000 == 0:
                 print("{} spectra done".format(ndone))
+                
             mz = spectrum.getMZ()
             intensity = spectrum.getIntensities()
             
             #create graph
-            G = self.spec2graph(mz, intensity, self.ppm_tolerance,
-                                self.min_charge, self.max_charge)
-            
-            #no clusters in the spectrum continue
-            if len(G) == 0:
-                return(spectrum)
+            try:
+                G = self.spec2graph(mz, intensity, self.ppm_tolerance,
+                                    self.min_charge, self.max_charge)
                 
-            #extract all path with possible isotope clusters
-            cluster_ar = self.extract_isotope_cluster(G, verbose=self.verbose)
-            
-            #resolve ambiguous cluster with scoring
-            cluster_res = self.resolve_ambiguous(cluster_ar, mz, intensity,
-                                                 min_score=self.min_score,
-                                                 min_abundance=self.min_abundance,
-                                                 min_improve=self.min_improve,
-                                                 verbose=self.verbose)
-            
-            #write results to dataframe
-            cluster_df = self.assemble_spectrum(cluster_res, mz, intensity, 
-                                                spectrum.getTitle()) 
+                #no clusters in the spectrum continue
+                if len(G) == 0:
+                    return(spectrum)
+                    
+                #extract all path with possible isotope clusters
+                cluster_ar = self.extract_isotope_cluster(G, mz, verbose=self.verbose)
+                
+                #resolve ambiguous cluster with scoring
+                cluster_res = self.resolve_ambiguous(cluster_ar, mz, intensity,
+                                                     min_score=self.min_score,
+                                                     min_abundance=self.min_abundance,
+                                                     min_improve=self.min_improve,
+                                                     verbose=self.verbose)
+                
+                #write results to dataframe
+                cluster_df = self.assemble_spectrum(cluster_res, mz, intensity, 
+                                                    spectrum.getTitle()) 
+            except:
+                print (spectrum.getTitle())
+                idwrite = np.random.randint(0, 1000)
+                print("Writing erroneous file: {}".format("Error_MGF_{}".format(idwrite)))
+                print(spectrum)
+                with open("Error_MGF_{}".format(idwrite), 'w') as fobj:
+                    fobj.write(spectrum.to_mgf())
+                sys.exit()
+                
+                
             if return_type == "df":
                 return(cluster_df)
             else:
@@ -205,7 +230,7 @@ class Deisotoper():
         #init graph
         n = len(mz)
         G = nx.DiGraph()
-        edges = []
+       
         zrange = np.arange(float(min_charge), float(max_charge), 1)
 #        distance_charge_map = {round((CA_DISTANCE/i), 4): i for i in zrange}
 #        charge_distances_map = {j: i for i, j in distance_charge_map.items()}
@@ -214,7 +239,7 @@ class Deisotoper():
         #build a graph from the spectrum
         #add edges if the distances between peaks matches any isotope distance for charges
         #from min_charge to max_charge
-        
+        ambiguity_dic = {}
         for i in range(0, n):
             for j in range(i+1, n):
                 # mz difference between next and current peak
@@ -225,20 +250,49 @@ class Deisotoper():
                 #only one charge state can match the next peak
                 min_idx = mz_error_ppm.argmin()
                 if mz_error_ppm[min_idx] <= ppm_error:
-                    edges.append((i, j,
+                    
+                    edgei = (i, j,
                                   {"intensity": intensity[j],
                                    "label": "z:{} \n dist:{} \n ppm:{} \n mz:{}".format(
                                                min_idx+1, np.round(mz_diff[min_idx],4),
                                                np.round(mz_error_ppm[min_idx],2),
-                                               np.round(mz[i],2)), "charge": zrange[min_idx]}))
+                                               np.round(mz[i],2)), "charge": zrange[min_idx]})                    
+                    #helper, store only the edge with the lowest mass error
+                    #for the same charge
+                    if i in ambiguity_dic:
+                        #check which entry is better
+                        #now check if the current edge is better than the last
+                        if ambiguity_dic[i]["error"][min_idx] <= np.round(mz_error_ppm[min_idx],2):
+                            pass
+                        else:
+                            ambiguity_dic[i]["edges"][min_idx] = edgei
+                    else:
+                        #init new entry
+                        ambiguity_dic[i] = {"error":np.zeros_like(zrange),
+                                             "edges": [None]*len(zrange)}
+                        
+                    ambiguity_dic[i]["error"][min_idx] = np.round(mz_error_ppm[min_idx],2)
+                    ambiguity_dic[i]["edges"][min_idx]  = edgei
+                    
+        #only write the best edges to the graph
+        edges = []
+        for entry in ambiguity_dic.keys():
+            for edge in ambiguity_dic[entry]["edges"]:
+                if edge is not None:
+                    edges.append(edge)
         G.add_edges_from(edges)
         return (G)
 
-    def extract_isotope_cluster(self, G, verbose=False):
+    def extract_isotope_cluster(self, G, mz, verbose=False):
         """
 
         :param G: graph
+        :param mz: mz array
         :return:
+            
+            
+        mz_to_df(mz, intensity, min_idx=0, max_idx=-1)
+        
         """
         #%%
 
@@ -254,8 +308,8 @@ class Deisotoper():
             #store the paths here
             path_dic = {}
             while has_path:
-
                 subgraph_copy = subgraph.copy()
+                
                 start_node = sorted(list(subgraph_copy.nodes()))[0]
                 if verbose:
                     print ("Start Graph: ", subgraph.nodes())
@@ -273,8 +327,10 @@ class Deisotoper():
 
                     while has_charge_path:
                         if verbose:
+                            plot_graph(subgraph)
                             print("Node:", current_node)
-                            print("    Graph: ", subgraph.nodes())
+                            print("    Graph: ", sorted(subgraph.nodes()))
+                            print("    MZ: ", mz[sorted(subgraph.nodes())])
                             print("    Edges: ", subgraph.edges())
                             print("    Path: ", path)
                             print("    CurrentNode: ", current_node)
@@ -293,11 +349,10 @@ class Deisotoper():
                         else:
                             path.append(next_node[0])
                             if len(branch) == 0:
-
                                 subgraph.remove_node(current_node)
                             else:
-
                                 subgraph.remove_edge(current_node, next_node[0])
+                                
                             if verbose:
                                 print("    REM Node: {}".format(next_node[0]))
                                 print("    REM Edge: {}-{}".format(current_node, next_node[0]))
