@@ -138,6 +138,10 @@ class Deisotoper():
             G = self.spec2graph(mz, intensity, self.ppm_tolerance,
                                 self.min_charge, self.max_charge)
             
+            #no clusters in the spectrum continue
+            if len(G) == 0:
+                return(spectrum)
+                
             #extract all path with possible isotope clusters
             cluster_ar = self.extract_isotope_cluster(G, verbose=self.verbose)
             
@@ -156,6 +160,7 @@ class Deisotoper():
             else:
                 spectrum.peaks = np.array([cluster_df["mz"].values, 
                                            cluster_df["intensity"].values]).transpose()
+                spectrum.peakcharge = cluster_df["charge"]
                 return(spectrum)
                 
                 
@@ -430,7 +435,8 @@ class Deisotoper():
                 X = np.transpose(res)
                 y = intensity[list(all_idx)] #0.0001
                 lin = Lasso(alpha=1,precompute=True,max_iter=1000, positive=True, random_state=9999,
-                            selection='random', fit_intercept=False).fit(X,y)
+                            selection='random', fit_intercept=False,
+                            tol=0.001).fit(X,y)
 
                 coefs = (lin.coef_ + 0.000001 )
                 abundance_estimate = coefs / coefs.sum()
