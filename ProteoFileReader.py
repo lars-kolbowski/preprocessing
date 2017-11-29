@@ -142,6 +142,9 @@ class MGF_Reader():
     >>#do something \r\n
     >>reader.store(outfile, outspectra) \r\n
     """
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+        
     def load(self, infile, getpeakcharge=False):
         """
         Function to set the input file for the MGF file.
@@ -187,7 +190,8 @@ class MGF_Reader():
                 charge = float(re.search("CHARGE=(\d)", line).groups()[0])
 
             elif "=" in line:
-                print ("unhandled paramter: %s" % (line))
+                if self.verbose:
+                    print ("unhandled paramter: %s" % (line))
 
             elif line.startswith("END IONS"):
                 ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array([mass, intensity]).transpose(), peakcharge)
