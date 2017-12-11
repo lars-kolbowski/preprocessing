@@ -39,13 +39,15 @@ def uncharged_masses(ms2_spec, charge_max, df=False):
         ms2_int = ms2_spec_mod.intensity
         ms2_charge = ms2_spec_mod.charge_pre_match
     # currently not used, was used to only combine higher intense peaks
+
+    ms2_int = ms2_int/max(ms2_int)
+    # print len(ms2_mz)
     try:
-        int_cutoff = sorted(ms2_int)[0]
+        int_cutoff = 0 #sorted(ms2_int)[-100]
     except IndexError:
         int_cutoff = 0
-    ms2_int = ms2_int/max(ms2_int)
-    mass_list = [get_mass(mzi, zi, charge_max, ii) for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int)] #ii>=int_cutoff
-    mass_list_low = [] # (get_mass(mzi, zi, charge_max), ii)for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int) if ii<int_cutoff
+    mass_list = [get_mass(mzi, zi, charge_max, ii) for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int) if ii>=int_cutoff] #ii>=int_cutoff
+    mass_list_low = [get_mass(mzi, zi, charge_max, ii)for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int) if ii<int_cutoff] #
 
     return mass_list, mass_list_low
 
@@ -59,6 +61,8 @@ def sum_frags(peak_masses, peak_masses_low):
     comb, comb_int = [], []
 
     for el in list(itertools.combinations(peak_masses, 2)):
+        comb += list(itertools.product(*el))
+    for el in list(itertools.product(*[peak_masses, peak_masses_low])):
         comb += list(itertools.product(*el))
 
     return np.array([(frag_comb[0][0] + frag_comb[1][0], np.mean([frag_comb[0][1], frag_comb[1][1]])) for frag_comb in comb])
@@ -76,7 +80,7 @@ def score_masses(possible_masses, paired_masses, ms2err):
         resdiff = np.abs(mass - isotope_peak)
         res_err = resdiff / isotope_peak *10**6
 
-        score = [inten[i] for i in range(len(res_err)) if res_err[i] <= ms2err]
+        score = [inten[i] for i in range(len(res_err)) if res_err[i] <= ms2err] #
         count += [sum(score)]
     return count
 
@@ -132,9 +136,9 @@ def test_monoisotopic_mass(results_store, ms2err, df=False):
 
     # corrected = [precursor_matches(spectrum, ms2err, df=False) for spectrum in results_store]
     if df:
-        corrected = Parallel(n_jobs=20)(delayed(precursor_matches)(x, ms2err, df=True) for x in results_store.groupby('PSMID'))
+        corrected = Parallel(n_jobs=15)(delayed(precursor_matches)(x, ms2err, df=True) for x in results_store.groupby('PSMID'))
     else:
-        corrected = Parallel(n_jobs=20)(delayed(precursor_matches)(spectrum, ms2err) for spectrum in results_store)
+        corrected = Parallel(n_jobs=15)(delayed(precursor_matches)(spectrum, ms2err) for spectrum in results_store)
 
     return corrected
 
@@ -147,13 +151,18 @@ def max_frag_count(x):
         return int(a.index.tolist()[0])
 
 
+def num_masses(x):
+    counts = x[[str(y) for y in np.arange(-4, 1, 1)]]
+    return sum([1 for y in counts if y>0])
+
+
 if __name__ == '__main__':
-    base_dir = 'D:/user/Swantje/projects/fragmass_sum/'
-    mgf_deiso = base_dir + '/deisotoped/hits_mscon_PF_20_100_0_B160803_02._deisotoped.mgf'
-    file_prefix = 'B160803_02_'
+    base_dir = 'D:/user/Swantje/projects/fragmass_sum/myco'
+    mgf_deiso = base_dir + '/B171018_02_Lumos_FO_IN_100_MycoDSS_SCX11_SECfrac16_rep1.mgf_deisotoped.mgf'
+    file_prefix = 'B171018_02_'
 
     prec_infos = pd.DataFrame.from_csv(base_dir + './prec_infos.csv')
-    hits_mip = prec_infos[['Xi_mip', 'Xi_hit', 'mass_raw']]
+    hits_mip = prec_infos[['Xi3_mip', 'Xi3_hit', 'mass_raw']]
     ms2_tol = 10
 
     exp = ProteoFileReader.MGF_Reader()
@@ -161,15 +170,24 @@ if __name__ == '__main__':
 
     b = test_monoisotopic_mass(exp, ms2_tol, df=False)
     # pickle.dump(b, open(base_dir + '/frag_counts_2Da_annotator_new.p', 'wb'))
-
+    b = [x for x in b if x is not None]
     frag_count = pd.DataFrame(b)
-    frag_count.columns = ['scan'] + ['-' + str(x) for x in range(4, -1, -1)]
+    frag_count.columns = ['scan'] + [str(x) for x in np.arange(-4, 1, 1)]
     frag_count['scan'] = file_prefix + frag_count['scan']
     frag_count.index = frag_count.scan
     del frag_count['scan']
 
     frag_count['max_frag'] = frag_count.apply(max_frag_count, axis=1)
     frag_count = pd.concat([frag_count, hits_mip], axis=1, join='inner')
+    # frag_count['hit_included'] = frag_count.apply(lambda x: True if x[str(int(x['Xi3_mip']))] > 0 else False, axis=1)
+    frag_count['num_masses'] = frag_count.apply(num_masses, axis=1)
 
-    frag_count.to_csv(base_dir + '/fragment_scores.csv')
+    res = open(base_dir + '/counts_settings_all.csv', 'a')
+    # res.write(','.join([str(x) for x in ['mean int top100', len(frag_count), len(frag_count[frag_count['Xi3_mip']!=0]),
+    #                                      sum(frag_count['max_frag'] == frag_count['Xi3_mip']), sum(frag_count['hit_included']),
+    #                                      sum(frag_count[frag_count['Xi3_mip']!=0]['max_frag'] == frag_count[frag_count['Xi3_mip']!=0]['Xi3_mip']), sum(frag_count[frag_count['Xi3_mip']!=0]['hit_included'])]]) + '\n')
+    res.write(
+        ','.join([str(x) for x in ['mean int top100', len(frag_count), sum(frag_count['num_masses'])]]) + '\n')
+    res.close()
+    frag_count.to_csv(base_dir + '/fragment_scores_all1.csv')
 

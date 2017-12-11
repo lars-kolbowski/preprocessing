@@ -24,12 +24,15 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='5'):
                '--config=' + cnf,
                '--output=' + outpath + '/xi_' + os.path.split(peakfile)[1].replace('.mgf', '.csv')]
 
-    xi = subprocess.Popen(xi_cmds)
+    xi = subprocess.Popen(xi_cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     xi.communicate()
 
 
 def get_ppm_error(xi_df, outfile):
     xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 7)]
+    if len(xi_df) < 75:
+        print 'not enough data to shift'
+        return 0
     median_err = np.median(xi_df['Precoursor Error'])
 
     fig, ax = plt.subplots()
@@ -83,7 +86,7 @@ def mass_recal(mgf, fasta, xi_cnf, outpath, xi_jar):
 
 
 if __name__ == '__main__':
-    base_dir = '//130.149.167.198/rappsilbergroup/users/lswantje/prepro_mito/trypnew/processed'
+    base_dir = '//130.149.167.198/rappsilbergroup/users/lswantje/prepro_mito/tryp/processed'
     mgf_dir = base_dir
     fasta = '//130.149.167.198/rappsilbergroup/users/MitoProject/For Swantje/20170109_uniprot_mitoIDrun_FASTA.fasta'
     outpath = base_dir + '/error_shift'
