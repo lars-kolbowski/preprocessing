@@ -9,7 +9,7 @@ import re
 proton = 1.00727647
 
 
-def get_mass(mz, z, z_max, i):
+def get_mass(mz, z, z_max):
     """
     Returns mass from m/z and charge. If unknown charge (=0) then all possible masses up to precursor z are returned.
     """
@@ -17,7 +17,7 @@ def get_mass(mz, z, z_max, i):
         z = range(1, int(z_max) + 1)
     else:
         z = [z]
-    return [((float(z_) * float(mz)) - float(z_)*proton, i) for z_ in z]
+    return [(float(z_) * float(mz)) - float(z_)*proton for z_ in z]
 
 
 def uncharged_masses(ms2_spec, charge_max, df=False):
@@ -27,7 +27,7 @@ def uncharged_masses(ms2_spec, charge_max, df=False):
     if not df:
         try:
             ms2_mz = ms2_spec.peaks[:,0]
-            ms2_int = ms2_spec.peaks[:,1]
+            # ms2_int = ms2_spec.peaks[:,1]
         except IndexError:
             return
         ms2_charge = ms2_spec.peakcharge
@@ -40,14 +40,14 @@ def uncharged_masses(ms2_spec, charge_max, df=False):
         ms2_charge = ms2_spec_mod.charge_pre_match
     # currently not used, was used to only combine higher intense peaks
 
-    ms2_int = ms2_int/max(ms2_int)
+    # ms2_int = ms2_int/max(ms2_int)
     # print len(ms2_mz)
     try:
         int_cutoff = 0 #sorted(ms2_int)[-100]
     except IndexError:
         int_cutoff = 0
-    mass_list = [get_mass(mzi, zi, charge_max, ii) for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int) if ii>=int_cutoff] #ii>=int_cutoff
-    mass_list_low = [get_mass(mzi, zi, charge_max, ii)for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int) if ii<int_cutoff] #
+    mass_list = [get_mass(mzi, zi, charge_max) for mzi, zi in zip(ms2_mz, ms2_charge)] #ii>=int_cutoff
+    mass_list_low = [] #[get_mass(mzi, zi, charge_max, ii)for mzi, zi, ii in zip(ms2_mz, ms2_charge, ms2_int) if ii<int_cutoff] #
 
     return mass_list, mass_list_low
 
@@ -65,7 +65,7 @@ def sum_frags(peak_masses, peak_masses_low):
     for el in list(itertools.product(*[peak_masses, peak_masses_low])):
         comb += list(itertools.product(*el))
 
-    return np.array([(frag_comb[0][0] + frag_comb[1][0], np.mean([frag_comb[0][1], frag_comb[1][1]])) for frag_comb in comb])
+    return np.array([(frag_comb[0] + frag_comb[1]) for frag_comb in comb])
 
 
 def score_masses(possible_masses, paired_masses, ms2err):
@@ -73,14 +73,14 @@ def score_masses(possible_masses, paired_masses, ms2err):
     For each possible (monoisotopic) mass a score is returned.
     """
     count = []
-    mass, inten = zip(*paired_masses)
+    mass = (paired_masses)
     mass = np.array(mass)
-    inten = np.array(inten)
+    # inten = np.array(inten)
     for isotope_peak in possible_masses:
         resdiff = np.abs(mass - isotope_peak)
         res_err = resdiff / isotope_peak *10**6
 
-        score = [inten[i] for i in range(len(res_err)) if res_err[i] <= ms2err] #
+        score = [1 for i in range(len(res_err)) if res_err[i] <= ms2err] #
         count += [sum(score)]
     return count
 
@@ -112,7 +112,7 @@ def precursor_matches(spec, ms2err, df=False):
         prec_charge = spec[1]['PrecursorZ'].unique()
         prec_mz = spec[1].npp_mz.unique() #PrecursorMZ.unique()
         prec_mass = (prec_charge * prec_mz) - prec_charge*proton
-        possible_masses = [prec_mass + (mip_i * 1.00335483) for mip_i in [-4, -3, -2, -1, 0]]
+        possible_masses = [prec_mass + (mip_i * 1.00335483) for mip_i in [-3, -2, -1, 0]]
 
     if df:
         peak_masses, peak_masses_low = uncharged_masses(spec[1], prec_charge, df=True)
@@ -152,7 +152,7 @@ def max_frag_count(x):
 
 
 def num_masses(x):
-    counts = x[[str(y) for y in np.arange(-4, 1, 1)]]
+    counts = x[[str(y) for y in np.arange(-3, 1, 1)]]
     return sum([1 for y in counts if y>0])
 
 
@@ -169,10 +169,10 @@ if __name__ == '__main__':
     exp.load(mgf_deiso, getpeakcharge=True)
 
     b = test_monoisotopic_mass(exp, ms2_tol, df=False)
-    # pickle.dump(b, open(base_dir + '/frag_counts_2Da_annotator_new.p', 'wb'))
+    pickle.dump(b, open(base_dir + '/frag_counts_3Da.p', 'wb'))
     b = [x for x in b if x is not None]
     frag_count = pd.DataFrame(b)
-    frag_count.columns = ['scan'] + [str(x) for x in np.arange(-4, 1, 1)]
+    frag_count.columns = ['scan'] + [str(x) for x in np.arange(-3, 1, 1)]
     frag_count['scan'] = file_prefix + frag_count['scan']
     frag_count.index = frag_count.scan
     del frag_count['scan']
@@ -182,12 +182,12 @@ if __name__ == '__main__':
     # frag_count['hit_included'] = frag_count.apply(lambda x: True if x[str(int(x['Xi3_mip']))] > 0 else False, axis=1)
     frag_count['num_masses'] = frag_count.apply(num_masses, axis=1)
 
-    res = open(base_dir + '/counts_settings_all.csv', 'a')
-    # res.write(','.join([str(x) for x in ['mean int top100', len(frag_count), len(frag_count[frag_count['Xi3_mip']!=0]),
-    #                                      sum(frag_count['max_frag'] == frag_count['Xi3_mip']), sum(frag_count['hit_included']),
-    #                                      sum(frag_count[frag_count['Xi3_mip']!=0]['max_frag'] == frag_count[frag_count['Xi3_mip']!=0]['Xi3_mip']), sum(frag_count[frag_count['Xi3_mip']!=0]['hit_included'])]]) + '\n')
-    res.write(
-        ','.join([str(x) for x in ['mean int top100', len(frag_count), sum(frag_count['num_masses'])]]) + '\n')
-    res.close()
-    frag_count.to_csv(base_dir + '/fragment_scores_all1.csv')
+    # res = open(base_dir + '/counts_settings_all.csv', 'a')
+    # # res.write(','.join([str(x) for x in ['mean int top100', len(frag_count), len(frag_count[frag_count['Xi3_mip']!=0]),
+    # #                                      sum(frag_count['max_frag'] == frag_count['Xi3_mip']), sum(frag_count['hit_included']),
+    # #                                      sum(frag_count[frag_count['Xi3_mip']!=0]['max_frag'] == frag_count[frag_count['Xi3_mip']!=0]['Xi3_mip']), sum(frag_count[frag_count['Xi3_mip']!=0]['hit_included'])]]) + '\n')
+    # res.write(
+    #     ','.join([str(x) for x in ['mean int top100 wo int', len(frag_count), sum(frag_count['num_masses'])]]) + '\n')
+    # res.close()
+    frag_count.to_csv(base_dir + '/fragment_counts.csv')
 
