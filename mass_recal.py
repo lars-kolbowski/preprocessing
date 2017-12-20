@@ -45,7 +45,6 @@ def get_ppm_error(xi_df, outfile):
 
     fig, ax = plt.subplots()
     sns.distplot(xi_df['Precoursor Error'], norm_hist=False, kde=False)
-    ax.text(0, 0, str(round(median_err, 2)), horizontalalignment='center', verticalalignment='center')
     ax.axvline(median_err)
     plt.savefig(outfile)
     plt.close()
@@ -97,7 +96,7 @@ def main(mgf, fasta, xi_cnf, outpath, xi_dir, threads):
     error_file.close()
 
     if ms1_err is not None: # shift all old m/z by value
-        adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath, 'recal'))
+        adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath))
 
 
 if __name__ == '__main__':

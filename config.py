@@ -9,4 +9,4 @@ xi_offline = 'D:/software/Xi_offline/XiSearch_1.6.731'
 # database for acquisitions
 database = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/resources/26SProteasome_1%iBAQ.fasta'
 # xi config (example in repository is for b- and y- ions, protease trypsin)
-xi_recal_config = 'D:/user/Swantje/projects/prepro_rappgit/preprocessing/xi_linear_by_tryp.conf'
+xi_recal_config = 'xi_linear_by_tryp.conf'

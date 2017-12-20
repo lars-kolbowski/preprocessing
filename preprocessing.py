@@ -9,6 +9,7 @@ from pyteomics import mzml
 from functools import partial
 import ProteoFileReader
 import mass_recal
+import zipfile
 
 
 def read_cmdline():
@@ -206,11 +207,16 @@ if __name__ == '__main__':
     recal_in = [os.path.join(outdir, x) for x in os.listdir(outdir) if '.mgf' in x]
     if mass_recalibration:
         # pool = Pool(processes=nthr)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
         # TODO change to parallel with manual input of error
         for inputfile in recal_in:
-            mass_recal.main(fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
-                            xi_dir=xi_offline, mgf=inputfile, threads=nthr)
-        # pool.map(partial(mass_recal.main, fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
+            mass_recal.main(fasta=database, xi_cnf=xi_recal_config, outpath=outdir,
+                            xi_dir=xi_offline, mgf=inputfile, threads=str(nthr))
+            output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
+                         arcname='recal_' + os.path.split(inputfile)[1])
+            # pool.map(partial(mass_recal.main, fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
         #                  xi_jar=xi_offline), recal_in)
         # pool.close()
         # pool.join()
