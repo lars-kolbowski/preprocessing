@@ -8,6 +8,7 @@ import getopt
 from pyteomics import mzml
 from functools import partial
 import ProteoFileReader
+import mass_recal
 
 
 def read_cmdline():
@@ -150,7 +151,7 @@ END IONS     """.format('.'.join([title, scan, scan, str(int(spectrum.charge))])
                         spectrum.getPrecursorMass(),
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
                         int(spectrum.charge), spectrum.getRT(),
-                        "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+                        "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
         out_writer.write(stavrox_mgf)
 
 
@@ -195,8 +196,21 @@ if __name__ == '__main__':
 {}
 """.format('\n'.join(full_paths)))
 
+    # start msconvert for conversion and peak filtering
     pool = Pool(processes=nthr)
     pool.map(partial(process_file, outdir=outdir, mscon_settings=mscon_settings, split_acq=split_acq,
                      detector_filter=detector_filter, mscon_exe=msconvert_exe), full_paths)
     pool.close()
     pool.join()
+
+    recal_in = [os.path.join(outdir, x) for x in os.listdir(outdir) if '.mgf' in x]
+    if mass_recalibration:
+        # pool = Pool(processes=nthr)
+        # TODO change to parallel with manual input of error
+        for inputfile in recal_in:
+            mass_recal.main(fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
+                            xi_dir=xi_offline, mgf=inputfile, threads=nthr)
+        # pool.map(partial(mass_recal.main, fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
+        #                  xi_jar=xi_offline), recal_in)
+        # pool.close()
+        # pool.join()

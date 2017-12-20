@@ -13,11 +13,13 @@ def xi_wrapper(arguments):
     return
 
 
-def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='5'):
+def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
+    elif os.path.isfile( outpath + '/xi_' + os.path.split(peakfile)[1].replace('.mgf', '.csv')):
+        return
 
-    xi_cmds = ['java', '-cp', xipath, 'rappsilber.applications.Xi',
+    xi_cmds = ['java', '-cp', xipath + '/fastutil-8.1.0.jar;' + xipath + '/XiSearch.jar', 'rappsilber.applications.Xi',
                '--fasta=' + fasta,
                '--xiconf=UseCPUs:' + threads,
                '--peaks=' + peakfile,
@@ -31,12 +33,19 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='5'):
 def get_ppm_error(xi_df, outfile):
     xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 7)]
     if len(xi_df) < 75:
-        print 'not enough data to shift'
-        return 0
+        print os.path.split(outfile)[1] + ': not enough data to shift'
+        err = raw_input('Enter error to correct by (0 for no correction):\n')
+        try:
+            err = float(err)
+            if (err != 0):
+                return err
+        except ValueError:
+            return None
     median_err = np.median(xi_df['Precoursor Error'])
 
     fig, ax = plt.subplots()
     sns.distplot(xi_df['Precoursor Error'], norm_hist=False, kde=False)
+    ax.text(0, 0, str(round(median_err, 2)), horizontalalignment='center', verticalalignment='center')
     ax.axvline(median_err)
     plt.savefig(outfile)
     plt.close()
@@ -45,11 +54,13 @@ def get_ppm_error(xi_df, outfile):
 
 
 def adjust_prec_mz(mgf_file, error, outpath):
+    outfile = os.path.join(outpath, 'recal_' + os.path.split(mgf_file)[1])
     if not os.path.exists(outpath):
         os.makedirs(outpath)
+    elif os.path.isfile(outfile):
+        return
     exp = ProteoFileReader.MGF_Reader()
     exp.load(mgf_file)
-    outfile = os.path.join(outpath, 'adj_' + os.path.split(mgf_file)[1])
 
     out_writer = open(os.path.join(outfile), "w")
     for spectrum in exp:
@@ -65,35 +76,39 @@ RTINSECONDS={}
 END IONS     """.format(spectrum.getTitle(),
                         prec_mz_new, spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
                             int(spectrum.charge), spectrum.getRT(),
-                            "\r".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+                            "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
         out_writer.write(stavrox_mgf)
 
 
-def mass_recal(mgf, fasta, xi_cnf, outpath, xi_jar):
+def main(mgf, fasta, xi_cnf, outpath, xi_dir, threads):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 
     filename = os.path.split(mgf)[1]
     # linear small search in Xi
-    run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_jar)
+    run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_dir, threads=threads)
 
-    # evaluate results, get mean / median
+    # evaluate results, get median ms1 error
     ms1_err = get_ppm_error(xi_df=pd.DataFrame.from_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
                             outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
 
-    # shift all old m/z by value
-    adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath, 'adj_mscon_PF_20'))
+    error_file = open(outpath + '/ms1_err.csv', 'a')
+    error_file.write(filename + ',' + str(ms1_err) + '\n')
+    error_file.close()
+
+    if ms1_err is not None: # shift all old m/z by value
+        adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath, 'recal'))
 
 
 if __name__ == '__main__':
-    base_dir = '//130.149.167.198/rappsilbergroup/users/lswantje/prepro_mito/tryp/processed'
+    base_dir = '//130.149.167.198/rappsilbergroup/users/lswantje/prepro_mito/tryp/new/mgf'
     mgf_dir = base_dir
     fasta = '//130.149.167.198/rappsilbergroup/users/MitoProject/For Swantje/20170109_uniprot_mitoIDrun_FASTA.fasta'
     outpath = base_dir + '/error_shift'
     for in_file in os.listdir(mgf_dir):
         if '.mgf' in in_file:
-            mass_recal(mgf=os.path.join(mgf_dir, in_file),
-                       fasta=fasta,
-                       xi_cnf='D:/user/Swantje/projects/pipeline_prepro_xi_fdr/resources/xi_linear.conf',
-                       outpath=outpath,
-                       xi_jar='D:/user/Swantje/XiSearch_1.6.731/*')
+            main(mgf=os.path.join(mgf_dir, in_file),
+                 fasta=fasta,
+                 xi_cnf='D:/user/Swantje/projects/pipeline_prepro_xi_fdr/resources/xi_linear_by_tryp.conf',
+                 outpath=outpath,
+                 xi_dir='D:/user/Swantje/XiSearch_1.6.731')
