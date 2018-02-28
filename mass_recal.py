@@ -31,7 +31,7 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
 
 
 def get_ppm_error(xi_df, outfile):
-    xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 7)]
+    xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)]
     if len(xi_df) < 75:
         print os.path.split(outfile)[1] + ': not enough data to shift'
         err = raw_input('Enter error to correct by (0 for no correction):\n')
@@ -79,21 +79,25 @@ END IONS     """.format(spectrum.getTitle(),
         out_writer.write(stavrox_mgf)
 
 
-def main(mgf, fasta, xi_cnf, outpath, xi_dir, threads):
+def main(mgf, fasta, xi_cnf, outpath, xi_dir, threads, val_input=None):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 
     filename = os.path.split(mgf)[1]
-    # linear small search in Xi
-    run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_dir, threads=threads)
+    if val_input is None:
+        # linear small search in Xi
+        run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_dir, threads=threads)
 
-    # evaluate results, get median ms1 error
-    ms1_err = get_ppm_error(xi_df=pd.DataFrame.from_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
-                            outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
+        # evaluate results, get median ms1 error
+        ms1_err = get_ppm_error(xi_df=pd.DataFrame.from_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
+                                outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
 
-    error_file = open(outpath + '/ms1_err.csv', 'a')
-    error_file.write(filename + ',' + str(ms1_err) + '\n')
-    error_file.close()
+        error_file = open(outpath + '/ms1_err.csv', 'a')
+        error_file.write(filename + ',' + str(ms1_err) + '\n')
+        error_file.close()
+    else:
+        ms1_input = pd.read_csv(val_input, header=None, index_col=0)
+        ms1_err = ms1_input[ms1_input.index.str.contains('_'.join(filename.split('_')[1:]))].values[0][0]
 
     if ms1_err is not None: # shift all old m/z by value
         adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath))

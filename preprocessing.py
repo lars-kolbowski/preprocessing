@@ -186,7 +186,7 @@ if __name__ == '__main__':
 
     # get files in directory
     if os.path.isdir(input_arg):
-        full_paths = [os.path.join(input_arg, rawfile) for rawfile in os.listdir(input_arg)]
+        full_paths = [os.path.join(input_arg, rawfile) for rawfile in os.listdir(input_arg) if rawfile[-4:] == '.raw']
         full_paths = [x for x in full_paths if not os.path.isdir(x)]
     # if single file given reformat to list
     # TODO allow txt file with filepath
@@ -213,7 +213,10 @@ if __name__ == '__main__':
         # TODO change to parallel with manual input of error
         for inputfile in recal_in:
             mass_recal.main(fasta=database, xi_cnf=xi_recal_config, outpath=outdir,
-                            xi_dir=xi_offline, mgf=inputfile, threads=str(nthr))
+                            xi_dir=xi_offline, mgf=inputfile, threads=str(nthr),
+                            # val_input='D:/user/Swantje/dsso_ot_it_error/raw/processed_together/ms1_err.csv' # TODO: integrate error table to config
+                            )
+            # val_input='//130.149.167.198/rappsilbergroup/users/lswantje/DSSO_prepro/xlinkx/processed_wosplit/ms1_err.csv'
             output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
                          arcname='recal_' + os.path.split(inputfile)[1])
             # pool.map(partial(mass_recal.main, fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
