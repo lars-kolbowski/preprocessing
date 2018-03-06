@@ -2,6 +2,7 @@ import os
 import pyopenms as oms
 import numpy as np
 from ProteoFileReader import MGF_Reader
+import mass_trace
 
 
 def add_relaxation_mgf(mgf, mps, outfile, create_comparison=False):
@@ -15,13 +16,18 @@ def add_relaxation_mgf(mgf, mps, outfile, create_comparison=False):
     out_writer = open(outfile, "w")
     for spectrum in spectra:
         # calculate mass (neglect proton bec. later on difference used)
-        scan = (spectrum.getTitle().split('.')[-2])
+        scan = int(spectrum.getTitle().split('.')[-2])
         # try:
+        differences = [0, -1, -2, -3, -4]
         if not create_comparison:
-            differences = mps[mps[:, 0] == scan, 1:]
-            differences = [-i for i in range(len(differences)) if differences[i] == 1]
-        else:
-            differences = [0, -1, -2, -3, -4]
+            row = mps[mps[:, 0] == scan, 1:]
+            if len(row) == 1:
+                differences = [-i for i in range(len(row[0])) if row[0][i] == 1]
+            elif len(row) > 1:
+                raise ValueError('multiple matches to scan %s' % scan)
+            else:
+                print 'scan %s not found' % scan
+
         mass = spectrum.getPrecursorMass() * spectrum.charge
         spectra_add_mip = [str((mass + x * mass_diff) / spectrum.charge) for x in differences if x != 0]
         if 0 in differences:
@@ -69,80 +75,95 @@ def ms1_peaks(exp, tolerance=6, mps_range=[-1, -2, -3, -4]):
     # loop through spectra and make count if precursor in MS2 spectrum
     peaks_found = []
     n_ms2 = 0
+    nspectra = exp.size()
     for i, spectrum in enumerate(exp):
 
         if spectrum.getMSLevel() == 1:
             continue
         n_ms2 += 1
-        # if iidone % 5000 == 0:
-        #     print "{}/{} done..".format(iidone, nspectra)
+        if i % 5000 == 0:
+            print "{}/{} done..".format(i, nspectra)
 
         # if iidone not in matched_scans:
         #     continue
         precursor = spectrum.getPrecursors()[0]
         prec_mz, prec_charge, prec_int = precursor.getMZ(), precursor.getCharge(), precursor.getIntensity()
-        ms1_prev = 0
-        for j in range(i, 0, -1):
-            tmp_ms1 = exp[j]
-            if tmp_ms1.getMSLevel() == 1:
-                ms1_prev += 1
-                res = tmp_ms1[tmp_ms1.findNearest(prec_mz)]
-                if abs(res.getMZ() - prec_mz) / prec_mz <= tolerance:
-                    theo_mip = np.array([prec_mz + (mip_i * 1.00335483) / prec_charge for mip_i in mps_range])
-                    mip_nearest = [tmp_ms1.findNearest(x) for x in theo_mip]
-                    error = np.array([get_error(tmp_ms1[mea].getMZ(), expi, ppm=True) for expi, mea in
-                                      zip(theo_mip, mip_nearest)])
-                    range_found = [True if x <= tolerance else False for x in error]
-                    if sum(range_found) == 0:
-                        # TODO: try if sensible to not mps search these
-                        peaks_found.append(
-                            [i + 1, True] + [True] * len(mps_range)
-                            # [i + 1, True] + [False] * len(mps_range)
-                        )
+        MS1scan = mass_trace.find_parent_MS1_scan(exp, i)
+        ppm_pseudo = 10 # taken from Svens script, apparently not used in function
+        mz_trace, scans_trace = mass_trace.extract_mass_trace(exp, MS1scan, prec_mz, prec_charge, ppm_pseudo, tolerance, 60)
+        if len(scans_trace) == 1:
+            tmp_ms1 = exp[MS1scan] # TODO find out why mass_trace does not find anything
+        else:
+            # try:
+            best_isotope_seed = np.argmax(mz_trace[:, 1])
+            # except:
+            #     pass
+            best_seed_spectrum = scans_trace[best_isotope_seed]
+
+            # ms1_prev = 0
+            # for j in range(i, 0, -1):
+            tmp_ms1 = exp[best_seed_spectrum]
+        # try:
+        #     best_isotope_seed = np.argmax(mz_trace[:, 1])
+        # except IndexError:
+        #     pass
+
+        # if tmp_ms1.getMSLevel() == 1:
+        # ms1_prev += 1
+        res = tmp_ms1[tmp_ms1.findNearest(prec_mz)]
+        if abs(res.getMZ() - prec_mz) / prec_mz <= tolerance:
+            theo_mip = np.array([prec_mz + (mip_i * 1.00335483) / prec_charge for mip_i in mps_range])
+            mip_nearest = [tmp_ms1.findNearest(x) for x in theo_mip]
+            error = np.array([get_error(tmp_ms1[mea].getMZ(), expi, ppm=True) for expi, mea in
+                              zip(theo_mip, mip_nearest)])
+            range_found = [True if x <= tolerance else False for x in error]
+            if sum(range_found) == 0:
+                # TODO: try if sensible to not mps search these
+                peaks_found.append(
+                    # [i + 1, True] + [True] * len(mps_range)
+                    [i + 1, True] + [False] * len(mps_range)
+                )
+                continue
+            else:
+                # check for continous peaks except -1 peak
+                # TODO: allow gap?
+                found = False
+                lightest_peak = 1
+                for i_mip in range(len(range_found), 1, -1):
+                    if range_found[i_mip - 1] & (i_mip > lightest_peak):
+                        lightest_peak = i_mip
+                    if sum(range_found[:i_mip]) == len(range_found[:i_mip]):
+                        # takes lightest 2 continous + existing lighter peaks, excludes heaviar
+                        sel = [False] * (i_mip - 2) + range_found[i_mip - 2:] # 2
+                        peaks_found.append([i + 1, False] + sel)
+                        found = True
                         break
-                    else:
-                        # check for continous peaks except -1 peak
-                        # TODO: allow gap?
-                        found = False
-                        lightest_peak = 1
-                        for i_mip in range(len(range_found), 1, -1):
-                            if range_found[i_mip - 1] & (i_mip > lightest_peak):
-                                lightest_peak = i_mip
-                            if sum(range_found[:i_mip]) == len(range_found[:i_mip]):
-                                # takes lightest 2 continous + existing lighter peaks, excludes heaviar
-                                sel = [False] * (i_mip - 1) + range_found[i_mip - 1:] # 2
-                                peaks_found.append([i + 1, False] + sel)
-                                found = True
-                                break
-                        # if no continous found take all
-                        if not found:
-                            peaks_found.append(
-                                # [i + 1, True] + [True] * len(mps_range)
-                                [i + 1, True] + [True] * lightest_peak + [False] * (len(range_found) - lightest_peak)
-                            )
-                            break
-                        else:
-                            found = False
-                            break
-                else:
-                    if ms1_prev == 3:
-                        break
+                # if no continous found take all
+                if not found:
+                    peaks_found.append(
+                        [i + 1, True] + [True] * len(mps_range)
+                        # [i + 1, True] + [True] * lightest_peak + [False] * (len(range_found) - lightest_peak)
+                    )
                     continue
+
+        else:
+            print 'Precursor not found'
+            continue
 
     return np.array(peaks_found)
 
 
 if __name__ == '__main__':
     isotope_diff = 1.00335483
-    # mzml_dir = 'D:/user/Swantje/data/PC/mzML/'
-    mzml_dir = 'D:/user/Swantje/data/Chaetomium/frac3_6/mzML/'
-    # mgf_filtered_dir = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/lars_PC_4frag_BS3_Lumos/All_prepro_peakfiles/mscon_PF_20_100_0/'
-    mgf_filtered_dir = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/chaetomium/fr3_6/All_prepro_peakfiles/mscon_PF_20_100_0/'
-    setting_name = 'ms1_sel4_4'
-    # mgf_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/lars_PC_4frag_BS3_Lumos/All_prepro_peakfiles/' + setting_name
-    # info_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/lars_PC_4frag_BS3_Lumos/relaxation_tbls/' + setting_name
-    mgf_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/chaetomium/fr3_6/All_prepro_peakfiles/' + setting_name
-    info_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/chaetomium/fr3_6/relaxation_tbls/' + setting_name
+    mzml_dir = 'D:/user/Swantje/data/PC/mzML/'
+    # mzml_dir = 'D:/user/Swantje/data/Chaetomium/frac3_6/mzML/'
+    mgf_filtered_dir = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/lars_PC_4frag_BS3_Lumos/All_prepro_peakfiles/mscon_PF_20_100_0/'
+    # mgf_filtered_dir = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/chaetomium/fr3_6/All_prepro_peakfiles/mscon_PF_20_100_0/'
+    setting_name = 'ms1_sel1_4_trace'
+    mgf_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/lars_PC_4frag_BS3_Lumos/All_prepro_peakfiles/' + setting_name
+    info_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/lars_PC_4frag_BS3_Lumos/relaxation_tbls/' + setting_name
+    # mgf_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/chaetomium/fr3_6/All_prepro_peakfiles/' + setting_name
+    # info_out = 'D:/user/Swantje/projects/pipeline_prepro_xi_fdr/chaetomium/fr3_6/relaxation_tbls/' + setting_name
 
     if not os.path.exists(mgf_out):
         os.makedirs(mgf_out)

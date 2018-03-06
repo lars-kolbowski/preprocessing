@@ -43,7 +43,7 @@ def get_scan(nativeid):
     return(int(re.search("scan=(\d+)", nativeid).groups()[0]))
     
 def extend_mass_mz(exp, MS1scan, mz, seed_scan, scans_masstrace, 
-                   peaks_masstrace, ppm_trace, add=True, RTdiff=90):
+                   peaks_masstrace, ppm_trace, add=True, RTdiff_max=90):
     """
     Given an m/z; tries to find the same m/z along the RT dimension.
     
@@ -82,10 +82,10 @@ def extend_mass_mz(exp, MS1scan, mz, seed_scan, scans_masstrace,
     scan_it = -1
     maxcount = 200
     currentcount = 0
-    while RTdiff <= RTdiff:
+    while RTdiff <= RTdiff_max:
         currentcount += 1
         if currentcount >= maxcount:
-            print ("oops debug me...")
+            # print ("max nscan diff reached") # TODO: check if really sensible (data I checked seemed ok for a bit over 200)
             break
         scan_it += constant
         temp_scan = exp[MS1scan + scan_it]
@@ -163,47 +163,48 @@ def extract_mass_trace(exp, MS1scan, mz, charge, ppm, ppm_trace, RTdiff=90):
 # test
 # =============================================================================
 #example
-    
-mzml_file = "data/MS1_data/E130808_16_Quty1_AB_DE_220_V127_H_6_666ul.mzML"
-#scan_dictionary = read_mzmls(path="data/MS1_data/E130808_16_Quty1_AB_DE_220_V127_H_6_666ul")
 
-mzml = oms.MzMLFile()
-exp = oms.MSExperiment()
-mzml.load(mzml_file, exp)
+if __name__ == '__main__':
+    mzml_file = "data/MS1_data/E130808_16_Quty1_AB_DE_220_V127_H_6_666ul.mzML"
+    #scan_dictionary = read_mzmls(path="data/MS1_data/E130808_16_Quty1_AB_DE_220_V127_H_6_666ul")
+
+    mzml = oms.MzMLFile()
+    exp = oms.MSExperiment()
+    mzml.load(mzml_file, exp)
 
 
-#init dictionary
-basename = "Test"
-scan_dictionary = {basename:{}}
-#iteate over spectra
-for spectrum in exp:
-    if spectrum.getMSLevel() == 2:
-        scan = int(re.search("scan=(\d+)", str(spectrum.getNativeID())).groups()[0])
-        scan_dictionary[basename][scan] = spectrum
-        
-#set example
-#we need:
-# exp, MS1scan, mz, seed_scan, scans_masstrace, peaks_masstrace, ppm_trace, add=True, RTdiff=120
-MS2scan = 30018
-MS1scan = find_parent_MS1_scan(exp, MS2scan)
-precursor = exp[MS2scan].getPrecursors()[0]
-        
-mz = precursor.getMZ()
-charge = precursor.getCharge()
-ppm = 10
-ppm_trace = 5
-RT = exp[MS2scan].getRT()
-print (mz, charge, MS1scan, MS2scan, RT, RT/60.)
+    #init dictionary
+    basename = "Test"
+    scan_dictionary = {basename:{}}
+    #iteate over spectra
+    for spectrum in exp:
+        if spectrum.getMSLevel() == 2:
+            scan = int(re.search("scan=(\d+)", str(spectrum.getNativeID())).groups()[0])
+            scan_dictionary[basename][scan] = spectrum
 
-#extract the mass trace!
-mz_trace, scans_trace = extract_mass_trace(exp, MS1scan, mz, charge, ppm, ppm_trace, 60)
-#use the peak with the highest intensity as seed
-best_isotope_seed = np.argmax(mz_trace[:,1])
-#get the spectrum where the peak had the highest intensity
-best_seed_spectrum = scans_trace[best_isotope_seed]
-plt.plot(mz_trace[:,1], '-')
-plt.xlabel("nscans")
-plt.ylabel("Intensity")
+    #set example
+    #we need:
+    # exp, MS1scan, mz, seed_scan, scans_masstrace, peaks_masstrace, ppm_trace, add=True, RTdiff=120
+    MS2scan = 30018
+    MS1scan = find_parent_MS1_scan(exp, MS2scan)
+    precursor = exp[MS2scan].getPrecursors()[0]
+
+    mz = precursor.getMZ()
+    charge = precursor.getCharge()
+    ppm = 10
+    ppm_trace = 5
+    RT = exp[MS2scan].getRT()
+    print (mz, charge, MS1scan, MS2scan, RT, RT/60.)
+
+    #extract the mass trace!
+    mz_trace, scans_trace = extract_mass_trace(exp, MS1scan, mz, charge, ppm, ppm_trace, 60)
+    #use the peak with the highest intensity as seed
+    best_isotope_seed = np.argmax(mz_trace[:,1])
+    #get the spectrum where the peak had the highest intensity
+    best_seed_spectrum = scans_trace[best_isotope_seed]
+    plt.plot(mz_trace[:,1], '-')
+    plt.xlabel("nscans")
+    plt.ylabel("Intensity")
 
 #gasphase stuff       
 #newscan = scan-1
