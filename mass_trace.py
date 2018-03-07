@@ -129,11 +129,11 @@ def extract_mass_trace(exp, MS1scan, mz, charge, ppm, ppm_trace, RTdiff=90):
     
     #first extend the precursor mz in +RT direction
     extend_mass_mz(exp, MS1scan, mz, seed_scan, scans_masstrace, 
-                   peaks_masstrace, ppm_trace, add=True)
+                   peaks_masstrace, ppm_trace, RTdiff_max=RTdiff, add=True)
     
     #then extend the precursor mz in -RT direction
     extend_mass_mz(exp, MS1scan-1, mz, seed_scan, scans_masstrace, 
-                   peaks_masstrace, ppm_trace, add=False)
+                   peaks_masstrace, ppm_trace, RTdiff_max=RTdiff, add=False)
             
     peaks_mt = np.matrix([(i.getMZ(), i.getIntensity()) for i in peaks_masstrace])
     return(peaks_mt, scans_masstrace)
