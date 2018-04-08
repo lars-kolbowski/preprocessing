@@ -26,7 +26,7 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
                '--config=' + cnf,
                '--output=' + outpath + '/xi_' + os.path.split(peakfile)[1].replace('.mgf', '.csv')]
 
-    xi = subprocess.Popen(xi_cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    xi = subprocess.Popen(xi_cmds) #, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     xi.communicate()
 
 
@@ -39,6 +39,8 @@ def get_ppm_error(xi_df, outfile):
             err = float(err)
             if (err != 0):
                 return err
+            elif err == 0:
+                return 0
         except ValueError:
             return None
     median_err = np.median(xi_df['Precoursor Error'])
