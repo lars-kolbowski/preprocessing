@@ -32,8 +32,17 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
 
 def get_ppm_error(xi_df, outfile):
     xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)]
+
+    median_err = np.median(xi_df['Precoursor Error'])
+
+    fig, ax = plt.subplots()
+    sns.distplot(xi_df['Precoursor Error'], norm_hist=False, kde=False)
+    ax.axvline(median_err)
+    plt.savefig(outfile)
+    plt.close()
+
     if len(xi_df) < 75:
-        print os.path.split(outfile)[1] + ': not enough data to shift'
+        print os.path.split(outfile)[1] + ': Only %s PSMs found. Median error is %s.' % (len(xi_df), median_err)
         err = raw_input('Enter error to correct by (0 for no correction):\n')
         try:
             err = float(err)
@@ -42,14 +51,7 @@ def get_ppm_error(xi_df, outfile):
             elif err == 0:
                 return 0
         except ValueError:
-            return None
-    median_err = np.median(xi_df['Precoursor Error'])
-
-    fig, ax = plt.subplots()
-    sns.distplot(xi_df['Precoursor Error'], norm_hist=False, kde=False)
-    ax.axvline(median_err)
-    plt.savefig(outfile)
-    plt.close()
+            return 0
 
     return median_err
 
