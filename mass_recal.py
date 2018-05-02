@@ -34,12 +34,14 @@ def get_ppm_error(xi_df, outfile):
     xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)]
 
     median_err = np.median(xi_df['Precoursor Error'])
-
-    fig, ax = plt.subplots()
-    sns.distplot(xi_df['Precoursor Error'], norm_hist=False, kde=False)
-    ax.axvline(median_err)
-    plt.savefig(outfile)
-    plt.close()
+    try:
+        fig, ax = plt.subplots()
+        sns.distplot(xi_df['Precoursor Error'], norm_hist=False, kde=False)
+        ax.axvline(median_err)
+        plt.savefig(outfile)
+        plt.close()
+    except ZeroDivisionError:
+        print(xi_df['Precoursor Error'][:5])
 
     if len(xi_df) < 75:
         print os.path.split(outfile)[1] + ': Only %s PSMs found. Median error is %s.' % (len(xi_df), median_err)
