@@ -44,7 +44,7 @@ def get_ppm_error(xi_df, outfile):
         print(xi_df['Precoursor Error'][:5])
 
     if len(xi_df) < 75:
-        print os.path.split(outfile)[1] + ': Only %s PSMs found. Median error is %s.' % (len(xi_df), median_err)
+        print(os.path.split(outfile)[1] + ': Only %s PSMs found. Median error is %s.' % (len(xi_df), median_err))
         err = raw_input('Enter error to correct by (0 for no correction):\n')
         try:
             err = float(err)
