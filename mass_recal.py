@@ -16,16 +16,18 @@ def xi_wrapper(arguments):
 def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
-    elif os.path.isfile( outpath + '/xi_' + os.path.split(peakfile)[1].replace('.mgf', '.csv')):
+    elif os.path.isfile(outpath + '/xi_' + os.path.split(peakfile)[1].replace('.mgf', '.csv')):
         return
 
-    xi_cmds = ['java', '-cp', xipath, 'rappsilber.applications.Xi', # + '/fastutil-8.1.0.jar;' + xipath + '/XiSearch.jar'
+    xi_cmds = ['java', '-cp', os.path.join(os.path.dirname(os.path.realpath(__file__)), xipath),
+               'rappsilber.applications.Xi', # + '/fastutil-8.1.0.jar;' + xipath + '/XiSearch.jar'
                '--fasta=' + fasta,
                '--xiconf=UseCPUs:' + threads,
                '--peaks=' + peakfile,
                '--config=' + cnf,
                '--output=' + outpath + '/xi_' + os.path.split(peakfile)[1].replace('.mgf', '.csv')]
 
+    print('calling ' + subprocess.list2cmdline(xi_cmds))
     xi = subprocess.Popen(xi_cmds) #, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     xi.communicate()
 
@@ -85,14 +87,14 @@ END IONS     """.format(spectrum.getTitle(),
         out_writer.write(stavrox_mgf)
 
 
-def main(mgf, fasta, xi_cnf, outpath, xi_dir, threads, val_input=None):
+def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.739.jar', val_input=None):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 
     filename = os.path.split(mgf)[1]
     if val_input is None:
         # linear small search in Xi
-        run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_dir, threads=threads)
+        run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_jar, threads=threads)
 
         # evaluate results, get median ms1 error
         ms1_err = get_ppm_error(xi_df=pd.DataFrame.from_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
@@ -120,4 +122,4 @@ if __name__ == '__main__':
                  fasta=fasta,
                  xi_cnf='D:/user/Swantje/projects/pipeline_prepro_xi_fdr/resources/xi_linear_by_tryp.conf',
                  outpath=outpath,
-                 xi_dir='D:/user/Swantje/XiSearch_1.6.731')
+                 xi_jar='D:/user/Swantje/XiSearch_1.6.731')

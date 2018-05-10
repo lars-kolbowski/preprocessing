@@ -4,5 +4,3 @@ split_acq = False
 detector_filter = 'all'
 nthr = 2
 mass_recalibration = False
-# directory with offline Xi
-xi_offline = 'D:/software/Xi_offline/XiSearch_1.6.731/XiSearch.jar'

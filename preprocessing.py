@@ -286,8 +286,8 @@ if __name__ == '__main__':
         # TODO change to parallel with manual input of error
         for inputfile in recal_in:
             mass_recal.main(fasta=recal_conf['db'], xi_cnf=recal_conf['xiconf'], outpath=outdir,
-                            xi_dir=xi_offline, mgf=inputfile, threads=str(nthr),
-                            val_input=recal_conf['shift_csv']#'D:/user/Swantje/dsso_ot_it_error/raw/processed_together/ms1_err.csv' # TODO: integrate error table to config
+                            mgf=inputfile, threads=str(nthr),
+                            val_input=recal_conf['shift_csv']  #'D:/user/Swantje/dsso_ot_it_error/raw/processed_together/ms1_err.csv'
                             )
             # val_input='//130.149.167.198/rappsilbergroup/users/lswantje/DSSO_prepro/xlinkx/processed_wosplit/ms1_err.csv'
             output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
