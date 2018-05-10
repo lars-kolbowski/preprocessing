@@ -33,7 +33,7 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
 
 
 def get_ppm_error(xi_df, outfile):
-    xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)]
+    xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)] # TODO: new xi version requires lower score?
 
     median_err = np.median(xi_df['Precoursor Error'])
     try:
@@ -47,7 +47,7 @@ def get_ppm_error(xi_df, outfile):
 
     if len(xi_df) < 75:
         print(os.path.split(outfile)[1] + ': Only %s PSMs found. Median error is %s.' % (len(xi_df), median_err))
-        err = raw_input('Enter error to correct by (0 for no correction):\n')
+        err = input('Enter error to correct by (0 for no correction):\n')
         try:
             err = float(err)
             if (err != 0):
