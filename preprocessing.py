@@ -208,7 +208,8 @@ def write_mgf(spectra, outfile):
         if 'ms2_scanId' in spectrum.getTitle():
             ms2_parent = re.search('ms2_scanId=.*scan=([0-9]+)', spectrum.getTitle()).groups()[0]
             title += ' ms2_scanId=%s' % ms2_parent
-        stavrox_mgf = """
+        if sys.version_info.major < 3:
+            stavrox_mgf = """
 MASS=Monoisotopic
 BEGIN IONS
 TITLE={}
@@ -221,6 +222,21 @@ END IONS     """.format(title,
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
                         int(spectrum.charge), spectrum.getRT(),
                         "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+        else:
+            stavrox_mgf = """
+MASS=Monoisotopic
+BEGIN IONS
+TITLE={}
+PEPMASS={} {}
+CHARGE={}+
+RTINSECONDS={}
+{}
+END IONS     """.format(title,
+                        spectrum.getPrecursorMass(),
+                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                        int(spectrum.charge), spectrum.getRT(),
+                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
+                                   spectrum.peaks[1][i] > 0]))
         out_writer.write(stavrox_mgf)
 
 

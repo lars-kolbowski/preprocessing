@@ -5,6 +5,7 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import ProteoFileReader
+import sys
 
 
 def xi_wrapper(arguments):
@@ -72,7 +73,8 @@ def adjust_prec_mz(mgf_file, error, outpath):
     out_writer = open(os.path.join(outfile), "w")
     for spectrum in exp:
         prec_mz_new = spectrum.getPrecursorMass()/(1-error/10.**6)
-        stavrox_mgf = """
+        if sys.version_info.major < 3:
+            stavrox_mgf = """
 MASS=Monoisotopic
 BEGIN IONS
 TITLE={}
@@ -81,9 +83,24 @@ CHARGE={}+
 RTINSECONDS={}
 {}
 END IONS     """.format(spectrum.getTitle(),
-                        prec_mz_new, spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                            int(spectrum.charge), spectrum.getRT(),
-                            "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+                            prec_mz_new, spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                                int(spectrum.charge), spectrum.getRT(),
+                                "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+        else:
+            stavrox_mgf = """
+MASS=Monoisotopic
+BEGIN IONS
+TITLE={}
+PEPMASS={} {}
+CHARGE={}+
+RTINSECONDS={}
+{}
+END IONS     """.format(spectrum.getTitle(),
+                        prec_mz_new,
+                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                        int(spectrum.charge), spectrum.getRT(),
+                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
+                             spectrum.peaks[1][i] > 0]))
         out_writer.write(stavrox_mgf)
 
 
