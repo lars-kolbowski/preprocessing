@@ -114,7 +114,7 @@ def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.
         run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_jar, threads=threads)
 
         # evaluate results, get median ms1 error
-        ms1_err = get_ppm_error(xi_df=pd.DataFrame.from_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
+        ms1_err = get_ppm_error(xi_df=pd.read_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
                                 outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
 
         error_file = open(outpath + '/ms1_err.csv', 'a')
