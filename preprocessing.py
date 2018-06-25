@@ -161,9 +161,10 @@ def generate_cihcd_spectra(mzml_file):
                 precursor_mz_groups = re.findall("([0-9.]+)@", filter_str)
             except AttributeError:
                 raise StandardError("filter string parse error: %s" % filter_str)
-
-            ms2_id = spectrum['precursorList']['precursor'][0]['spectrumRef']
-
+            try:
+                ms2_id = spectrum['precursorList']['precursor'][0]['spectrumRef']
+            except KeyError:
+                ms2_id = '' # TODO why Key ERror
             title = os.path.split(mzml_file)[1].split('.mzML')[0] + " " + spectrum['id'] + " ms2_scanId=" + ms2_id
             rt = spectrum['scanList']['scan'][0]['scan start time'] * 60
 
@@ -203,10 +204,16 @@ def write_mgf(spectra, outfile):
     for spectrum in spectra:
         scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
         # title = spectrum.getTitle()
-        title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        try:
+            title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        except AttributeError:
+            title = re.match('[0-9]{8}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
         title = '.'.join([title, scan, scan, str(int(spectrum.charge))])
         if 'ms2_scanId' in spectrum.getTitle():
-            ms2_parent = re.search('ms2_scanId=.*scan=([0-9]+)', spectrum.getTitle()).groups()[0]
+            try:
+                ms2_parent = re.search('ms2_scanId=.*scan=([0-9]+)', spectrum.getTitle()).groups()[0]
+            except AttributeError:
+                ms2_parent = 0
             title += ' ms2_scanId=%s' % ms2_parent
         if sys.version_info.major < 3:
             stavrox_mgf = """
@@ -240,7 +247,7 @@ END IONS     """.format(title,
         out_writer.write(stavrox_mgf)
 
 
-def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=False): #TODO implement option further up
+def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=True): #TODO implement option further up
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -301,6 +308,8 @@ if __name__ == '__main__':
         output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
         # TODO change to parallel with manual input of error
         for inputfile in recal_in:
+            if 'ms3' in os.path.split(inputfile)[1]:
+                continue
             mass_recal.main(fasta=recal_conf['db'], xi_cnf=recal_conf['xiconf'], outpath=outdir,
                             mgf=inputfile, threads=str(nthr),
                             val_input=recal_conf['shift_csv']  #'D:/user/Swantje/dsso_ot_it_error/raw/processed_together/ms1_err.csv'
