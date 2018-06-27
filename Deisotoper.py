@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import Lasso
 from joblib import Parallel, delayed
 import sys
+import pyopenms as oms
 
 #package modules
 import AveragineModel as AM
@@ -15,6 +16,19 @@ import ProteoFileReader as PFR
 H_MASS = 1.007276466583
 CA_DISTANCE = 1.0033548378
 
+
+def mz_to_df(mz, intensity, min_idx=0, max_idx=-1):
+    """
+    Given MZ and Intensity returns a dataframe.
+    """
+    df = pd.DataFrame()
+    df["mz"] = mz
+    df["intensity"] = intensity
+    if max_idx == -1:
+        max_idx = df.shape[0]
+    df_filt = df.iloc[min_idx:max_idx]
+    df_filt.to_clipboard(sep="\t", index=False, header=False)
+    return(df_filt)
 
 def plot_G(G):
     """
@@ -118,7 +132,7 @@ class Deisotoper():
 
     
     def parallel_helper(self, spectrum, return_type, show_progress=False,
-                        ndone=-1):
+                        ndone=-1, spectratype="mgf"):
             """
             Work horse of the class.
             
@@ -131,31 +145,66 @@ class Deisotoper():
             """
             if ndone % 5000 == 0:
                 print("{} spectra done".format(ndone))
-            mz = spectrum.getMZ()
-            intensity = spectrum.getIntensities()
+                
             
+            if spectratype.lower() == "mgf":
+                mz = np.ravel(spectrum.getMZ())
+                intensity = np.ravel(spectrum.getIntensities())
+                
+            elif spectratype.lower() == "mzml":
+                mz, intensity = spectrum.get_peaks()
+                
+            else:
+                print ("Spectrumtype not supported.")
+                sys.exit()
+                
             #create graph
-            G = self.spec2graph(mz, intensity, self.ppm_tolerance,
-                                self.min_charge, self.max_charge)
-            
-            #extract all path with possible isotope clusters
-            cluster_ar = self.extract_isotope_cluster(G, verbose=self.verbose)
-            
-            #resolve ambiguous cluster with scoring
-            cluster_res = self.resolve_ambiguous(cluster_ar, mz, intensity,
-                                                 min_score=self.min_score,
-                                                 min_abundance=self.min_abundance,
-                                                 min_improve=self.min_improve,
-                                                 verbose=self.verbose)
-            
-            #write results to dataframe
-            cluster_df = self.assemble_spectrum(cluster_res, mz, intensity, 
-                                                spectrum.getTitle()) 
+            try:
+                G = self.spec2graph(mz, intensity, self.ppm_tolerance,
+                                    self.min_charge, self.max_charge)
+                
+                #no clusters in the spectrum continue
+                if len(G) == 0:
+                    if return_type == "df":
+                        cluster_df = pd.DataFrame()
+                        cluster_df["mz"] = mz
+                        cluster_df["intensity"] = intensity
+                        cluster_df["charge"] = 0
+                        cluster_df["cluster_id"] = 0
+                        cluster_df["SpectrumID"] = spectrum.getTitle()
+                        return(cluster_df)
+                    else:
+                        return(spectrum)
+                    
+                #extract all path with possible isotope clusters
+                cluster_ar = self.extract_isotope_cluster(G, mz, verbose=self.verbose)
+                
+                #resolve ambiguous cluster with scoring
+                cluster_res = self.resolve_ambiguous(cluster_ar, mz, intensity,
+                                                     min_score=self.min_score,
+                                                     min_abundance=self.min_abundance,
+                                                     min_improve=self.min_improve,
+                                                     verbose=self.verbose)
+                
+                #write results to dataframe
+                cluster_df = self.assemble_spectrum(cluster_res, mz, intensity, 
+                                                    spectrum.getTitle()) 
+            except:
+                print (spectrum.getTitle())
+                idwrite = np.random.randint(0, 1000)
+                print("Writing erroneous file: {}".format("Error_MGF_{}".format(idwrite)))
+                print(spectrum)
+                with open("MGF/Error_MGF_{}".format(idwrite), 'w') as fobj:
+                    fobj.write(spectrum.to_mgf())
+                #sys.exit()
+                
+                
             if return_type == "df":
                 return(cluster_df)
             else:
                 spectrum.peaks = np.array([cluster_df["mz"].values, 
                                            cluster_df["intensity"].values]).transpose()
+                spectrum.peakcharge = cluster_df["charge"]
                 return(spectrum)
                 
                 
@@ -173,8 +222,28 @@ class Deisotoper():
             results_store = Parallel(n_jobs=n_jobs)\
                 (delayed(self.parallel_helper)(spectrum, return_type, show_progress, ii) for ii, spectrum in enumerate(MGF_file))
         
+        elif in_type.lower() =="mzml":
+            mzml_file = oms.MzMLFile()
+            exp = oms.MSExperiment()
+            mzml_file.load(infile, exp)
+            
+            #get the MS2 spectra
+            spectra_PFR = []
+            for spectrum in exp:
+                if spectrum.getMSLevel() == 2:
+                    spectra_PFR.append(PFR.MS2_spectrum(spectrum.getNativeID(),
+                                                         spectrum.getRT(),
+                                                         spectrum.getPrecursors()[0].getMZ(),
+                                                         spectrum.getPrecursors()[0].getIntensity(),
+                                                         spectrum.getPrecursors()[0].getCharge(),
+                                                         np.matrix(spectrum.get_peaks()).transpose()))
+
+            results_store = Parallel(n_jobs=n_jobs)\
+                (delayed(self.parallel_helper)(spectrum, return_type, show_progress, ii) for ii, spectrum in enumerate(spectra_PFR))
         else:
-            sys.exit("Other Types not yet supported. Please provide a MGF")
+            print ("In type is not supported.")
+            sys.exit()
+            
             
         if return_type == "df":
             results_store_df = pd.concat(results_store)
@@ -189,7 +258,7 @@ class Deisotoper():
         """
         Creates a graph representation of the peakdata. Connect all peaks
         that are only within a 'da_error' distance measurement.
-
+			
         :param max_charge:
         :param min_charge:
         :param mz:
@@ -200,7 +269,7 @@ class Deisotoper():
         #init graph
         n = len(mz)
         G = nx.DiGraph()
-        edges = []
+       
         zrange = np.arange(float(min_charge), float(max_charge), 1)
 #        distance_charge_map = {round((CA_DISTANCE/i), 4): i for i in zrange}
 #        charge_distances_map = {j: i for i, j in distance_charge_map.items()}
@@ -209,7 +278,7 @@ class Deisotoper():
         #build a graph from the spectrum
         #add edges if the distances between peaks matches any isotope distance for charges
         #from min_charge to max_charge
-        
+        ambiguity_dic = {}
         for i in range(0, n):
             for j in range(i+1, n):
                 # mz difference between next and current peak
@@ -220,20 +289,49 @@ class Deisotoper():
                 #only one charge state can match the next peak
                 min_idx = mz_error_ppm.argmin()
                 if mz_error_ppm[min_idx] <= ppm_error:
-                    edges.append((i, j,
+                    
+                    edgei = (i, j,
                                   {"intensity": intensity[j],
                                    "label": "z:{} \n dist:{} \n ppm:{} \n mz:{}".format(
                                                min_idx+1, np.round(mz_diff[min_idx],4),
                                                np.round(mz_error_ppm[min_idx],2),
-                                               np.round(mz[i],2)), "charge": zrange[min_idx]}))
+                                               np.round(mz[i],2)), "charge": zrange[min_idx]})                    
+                    #helper, store only the edge with the lowest mass error
+                    #for the same charge
+                    if i in ambiguity_dic:
+                        #check which entry is better
+                        #now check if the current edge is better than the last
+                        if ambiguity_dic[i]["error"][min_idx] <= np.round(mz_error_ppm[min_idx],2):
+                            pass
+                        else:
+                            ambiguity_dic[i]["edges"][min_idx] = edgei
+                    else:
+                        #init new entry
+                        ambiguity_dic[i] = {"error":np.zeros_like(zrange),
+                                             "edges": [None]*len(zrange)}
+                        
+                    ambiguity_dic[i]["error"][min_idx] = np.round(mz_error_ppm[min_idx],2)
+                    ambiguity_dic[i]["edges"][min_idx]  = edgei
+                    
+        #only write the best edges to the graph
+        edges = []
+        for entry in ambiguity_dic.keys():
+            for edge in ambiguity_dic[entry]["edges"]:
+                if edge is not None:
+                    edges.append(edge)
         G.add_edges_from(edges)
         return (G)
 
-    def extract_isotope_cluster(self, G, verbose=False):
+    def extract_isotope_cluster(self, G, mz, verbose=False):
         """
 
         :param G: graph
+        :param mz: mz array
         :return:
+            
+            
+        mz_to_df(mz, intensity, min_idx=0, max_idx=-1)
+        
         """
         #%%
 
@@ -249,8 +347,8 @@ class Deisotoper():
             #store the paths here
             path_dic = {}
             while has_path:
-
                 subgraph_copy = subgraph.copy()
+                
                 start_node = sorted(list(subgraph_copy.nodes()))[0]
                 if verbose:
                     print ("Start Graph: ", subgraph.nodes())
@@ -268,8 +366,10 @@ class Deisotoper():
 
                     while has_charge_path:
                         if verbose:
+                            plot_graph(subgraph)
                             print("Node:", current_node)
-                            print("    Graph: ", subgraph.nodes())
+                            print("    Graph: ", sorted(subgraph.nodes()))
+                            print("    MZ: ", mz[sorted(subgraph.nodes())])
                             print("    Edges: ", subgraph.edges())
                             print("    Path: ", path)
                             print("    CurrentNode: ", current_node)
@@ -288,11 +388,10 @@ class Deisotoper():
                         else:
                             path.append(next_node[0])
                             if len(branch) == 0:
-
                                 subgraph.remove_node(current_node)
                             else:
-
                                 subgraph.remove_edge(current_node, next_node[0])
+                                
                             if verbose:
                                 print("    REM Node: {}".format(next_node[0]))
                                 print("    REM Edge: {}-{}".format(current_node, next_node[0]))
@@ -430,7 +529,8 @@ class Deisotoper():
                 X = np.transpose(res)
                 y = intensity[list(all_idx)] #0.0001
                 lin = Lasso(alpha=1,precompute=True,max_iter=1000, positive=True, random_state=9999,
-                            selection='random', fit_intercept=False).fit(X,y)
+                            selection='random', fit_intercept=False,
+                            tol=0.001).fit(X,y)
 
                 coefs = (lin.coef_ + 0.000001 )
                 abundance_estimate = coefs / coefs.sum()

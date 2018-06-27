@@ -36,7 +36,7 @@ def averagine_model(mass, n_peaks=5, only_intensity=False):
     Example:
     -------
         >>> pepmass = 1500
-        >>> get_expected_intensity_distribution(pepmass)
+        >>> averagine_model(pepmass)
 
     """
     isotope_dist = oms.IsotopeDistribution()
@@ -64,6 +64,9 @@ def score_cluster(mz_temp, int_temp, charge_temp):
     mass = mz_temp[0]*charge_temp
     peaks = averagine_model(mass, len(mz_temp))
     peaks[:,0] = mz_temp
+#    print(peaks[:,1])
+#    print(int_temp/int_temp.sum())
+#    print(stats.pearsonr(peaks[:,1], (int_temp/int_temp.sum())))
     return(stats.pearsonr(peaks[:,1], (int_temp/int_temp.sum()))[0], peaks)
 
 
