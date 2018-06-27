@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import Lasso
 from joblib import Parallel, delayed
 import sys
+import pyopenms as oms
 
 #package modules
 import AveragineModel as AM
@@ -131,7 +132,7 @@ class Deisotoper():
 
     
     def parallel_helper(self, spectrum, return_type, show_progress=False,
-                        ndone=-1):
+                        ndone=-1, spectratype="mgf"):
             """
             Work horse of the class.
             
@@ -145,9 +146,18 @@ class Deisotoper():
             if ndone % 5000 == 0:
                 print("{} spectra done".format(ndone))
                 
-            mz = spectrum.getMZ()
-            intensity = spectrum.getIntensities()
             
+            if spectratype.lower() == "mgf":
+                mz = np.ravel(spectrum.getMZ())
+                intensity = np.ravel(spectrum.getIntensities())
+                
+            elif spectratype.lower() == "mzml":
+                mz, intensity = spectrum.get_peaks()
+                
+            else:
+                print ("Spectrumtype not supported.")
+                sys.exit()
+                
             #create graph
             try:
                 G = self.spec2graph(mz, intensity, self.ppm_tolerance,
@@ -155,7 +165,16 @@ class Deisotoper():
                 
                 #no clusters in the spectrum continue
                 if len(G) == 0:
-                    return(spectrum)
+                    if return_type == "df":
+                        cluster_df = pd.DataFrame()
+                        cluster_df["mz"] = mz
+                        cluster_df["intensity"] = intensity
+                        cluster_df["charge"] = 0
+                        cluster_df["cluster_id"] = 0
+                        cluster_df["SpectrumID"] = spectrum.getTitle()
+                        return(cluster_df)
+                    else:
+                        return(spectrum)
                     
                 #extract all path with possible isotope clusters
                 cluster_ar = self.extract_isotope_cluster(G, mz, verbose=self.verbose)
@@ -175,9 +194,9 @@ class Deisotoper():
                 idwrite = np.random.randint(0, 1000)
                 print("Writing erroneous file: {}".format("Error_MGF_{}".format(idwrite)))
                 print(spectrum)
-                with open("Error_MGF_{}".format(idwrite), 'w') as fobj:
+                with open("MGF/Error_MGF_{}".format(idwrite), 'w') as fobj:
                     fobj.write(spectrum.to_mgf())
-                sys.exit()
+                #sys.exit()
                 
                 
             if return_type == "df":
@@ -203,8 +222,28 @@ class Deisotoper():
             results_store = Parallel(n_jobs=n_jobs)\
                 (delayed(self.parallel_helper)(spectrum, return_type, show_progress, ii) for ii, spectrum in enumerate(MGF_file))
         
+        elif in_type.lower() =="mzml":
+            mzml_file = oms.MzMLFile()
+            exp = oms.MSExperiment()
+            mzml_file.load(infile, exp)
+            
+            #get the MS2 spectra
+            spectra_PFR = []
+            for spectrum in exp:
+                if spectrum.getMSLevel() == 2:
+                    spectra_PFR.append(PFR.MS2_spectrum(spectrum.getNativeID(),
+                                                         spectrum.getRT(),
+                                                         spectrum.getPrecursors()[0].getMZ(),
+                                                         spectrum.getPrecursors()[0].getIntensity(),
+                                                         spectrum.getPrecursors()[0].getCharge(),
+                                                         np.matrix(spectrum.get_peaks()).transpose()))
+
+            results_store = Parallel(n_jobs=n_jobs)\
+                (delayed(self.parallel_helper)(spectrum, return_type, show_progress, ii) for ii, spectrum in enumerate(spectra_PFR))
         else:
-            sys.exit("Other Types not yet supported. Please provide a MGF")
+            print ("In type is not supported.")
+            sys.exit()
+            
             
         if return_type == "df":
             results_store_df = pd.concat(results_store)
@@ -219,7 +258,7 @@ class Deisotoper():
         """
         Creates a graph representation of the peakdata. Connect all peaks
         that are only within a 'da_error' distance measurement.
-
+			
         :param max_charge:
         :param min_charge:
         :param mz:

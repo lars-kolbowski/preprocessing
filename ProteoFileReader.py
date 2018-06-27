@@ -27,6 +27,7 @@ def mzMLReader(in_file):
     file.load(in_file, exp)
     return(exp)
 
+
 class MS2_spectrum():
     """
     Class container for MS2 spectra.
@@ -127,6 +128,7 @@ END IONS
         """ % (self.title, self.RT, self.pepmz, self.pepint, self.charge, "\r\n".join(["%s %s %s" % (i[0], i[1], j, ) for i,j in zip(self.peaks, self.peakcharge)]))
         return(mgf_str)
 
+    
 #==============================================================================
 # File Reader
 #==============================================================================
