@@ -3,3 +3,4 @@ mscon_settings = ['peakPicking true 2-', 'msLevel 2-', 'MS2Denoise 20 100 false'
 split_acq = False
 detector_filter = 'all'
 nthr = 2
+mass_recalibration = False

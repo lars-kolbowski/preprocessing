@@ -11,6 +11,7 @@ Created on Wed Sep 17 14:08:39 2014
 #==============================================================================
 import re
 import numpy as np
+import sys
 import pyopenms as oms
 
 def mzMLReader(in_file):
@@ -26,7 +27,6 @@ def mzMLReader(in_file):
     exp = oms.MSExperiment()
     file.load(in_file, exp)
     return(exp)
-
 
 class MS2_spectrum():
     """
@@ -196,7 +196,11 @@ class MGF_Reader():
                     print ("unhandled paramter: %s" % (line))
 
             elif line.startswith("END IONS"):
-                ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array([mass, intensity]).transpose(), peakcharge)
+                if sys.version_info.major < 3:
+                    ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array(zip(mass, intensity)), peakcharge)
+                else:
+                    ms = MS2_spectrum(title, RT, pep_mass, pep_int, charge, np.array((mass, intensity)), peakcharge)
+
                 yield ms
             else:
                 if found_ions is True:
