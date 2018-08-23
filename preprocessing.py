@@ -202,13 +202,13 @@ def mscon_cmd(filepath, outdir, settings, mgf):
 def write_mgf(spectra, outfile):
     out_writer = open(os.path.join(outfile), "w")
     for spectrum in spectra:
-        scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
-        # title = spectrum.getTitle()
-        try:
-            title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
-        except AttributeError:
-            title = re.match('[0-9]{8}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
-        title = '.'.join([title, scan, scan, str(int(spectrum.charge))])
+        title = spectrum.getTitle()
+        # scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
+        # try:
+        #     title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        # except AttributeError:
+        #     title = re.match('[0-9]{8}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        # title = '.'.join([title, scan, scan, str(int(spectrum.charge))])
         if 'ms2_scanId' in spectrum.getTitle():
             try:
                 ms2_parent = re.search('ms2_scanId=.*scan=([0-9]+)', spectrum.getTitle()).groups()[0]
