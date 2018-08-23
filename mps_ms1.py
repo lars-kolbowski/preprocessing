@@ -35,10 +35,10 @@ def add_relaxation_mgf(mgf, mps, outfile, create_comparison=False):
             else:
                 print 'scan %s not found' % scan
 
-        mass = spectrum.getPrecursorMass() * spectrum.charge
+        mass = spectrum.getPrecursorMz() * spectrum.charge
         spectra_add_mip = [str((mass + x * mass_diff) / spectrum.charge) for x in differences if x != 0]
         if 0 in differences:
-            prec_mz = spectrum.getPrecursorMass()
+            prec_mz = spectrum.getPrecursorMz()
         else:
             prec_mz = spectra_add_mip[0]
             spectra_add_mip = spectra_add_mip[1:]
