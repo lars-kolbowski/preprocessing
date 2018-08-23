@@ -72,7 +72,7 @@ def adjust_prec_mz(mgf_file, error, outpath):
 
     out_writer = open(os.path.join(outfile), "w")
     for spectrum in exp:
-        prec_mz_new = spectrum.getPrecursorMz()/(1-error/10.**6)
+        prec_mz_new = spectrum.getPrecursorMZ()/(1-error/10.**6)
         if sys.version_info.major < 3:
             stavrox_mgf = """
 MASS=Monoisotopic
