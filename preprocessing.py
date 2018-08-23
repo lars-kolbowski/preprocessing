@@ -88,7 +88,6 @@ def mzml_to_MS2_spectra(mzml_file, detector_filter="all"):
     sorted_ms2_spectra = []
     unknown_frag_method_count = 0
 
-
     n = 0
     for spectrum in mzml_reader:
         if spectrum['ms level'] == 2:
@@ -132,7 +131,16 @@ def mzml_to_MS2_spectra(mzml_file, detector_filter="all"):
                 frag_method = 'unknown'
                 unknown_frag_method_count += 1
 
-            ms2class_spectrum = ProteoFileReader.MS2_spectrum(title, rt, pre_mz, pre_int, pre_z, peaks, frag_method, detector_str)
+            ms2class_spectrum = ProteoFileReader.MS2_spectrum(
+                title,
+                rt,
+                pre_mz,
+                pre_int,
+                pre_z,
+                peaks,
+                detector=detector_str,
+                fragmethod=frag_method
+            )
 
             sorted_ms2_spectra.append(ms2class_spectrum)
 
