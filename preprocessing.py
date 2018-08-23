@@ -279,7 +279,7 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
 
         write_mgf(
             spectra=split_spectra,
-            outfile=os.path.join(outdir, acq + '_' + filename[:filename.rfind('.')]+'.mgf')
+            outfile=os.path.join(outdir, filename[:filename.rfind('.')]+'.mgf')
         )
 
 
