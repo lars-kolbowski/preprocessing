@@ -69,29 +69,25 @@ def read_cmdline():
     return input_arg, outdir, config, recal_conf, recal
 
 
-def split_mzml(mzml_file, detector="all"):
+def mzml_to_MS2_spectra(mzml_file, detector_filter="all"):
     """
-    function to split a mzML file into dict of MS2_Spectra objects (can be written to mgf format)
-    by fragmentation method
+    function to split a mzML file into a list of MS2_Spectra objects (can be written to mgf format)
+    with fragmentation method and detector type
 
     Parameters:
     -----------------------------------------
     mzml_file: str,
             path to mzML file
+    detector_filter: filter scans by detector type ('all', 'FT', 'IT')
 
-    Return: dict {fragMethod: list(MS2_spectrum)
+    Return: list(MS2_spectrum)
 
     """
 
     mzml_reader = mzml.read(mzml_file)
-    ordered_ms2_spectra = {
-        "CID": [],
-        "HCD": [],
-        "ETD": [],
-        "ETciD": [],
-        "EThcD": [],
-        "unknown": []
-    }
+    sorted_ms2_spectra = []
+    unknown_frag_method_count = 0
+
 
     n = 0
     for spectrum in mzml_reader:
@@ -104,8 +100,8 @@ def split_mzml(mzml_file, detector="all"):
             except AttributeError:
                 raise StandardError("filter string parse error: %s" % filter_str)
 
-            if not detector == "all":
-                if not detector == detector_str:
+            if not detector_filter == "all":
+                if not detector_filter == detector_str:
                     continue
 
             title = os.path.split(mzml_file)[1].split('.mzML')[0] + " " + spectrum['id']
@@ -119,27 +115,31 @@ def split_mzml(mzml_file, detector="all"):
             pre_z = precursor['charge state']
             peaks = zip(spectrum['m/z array'], spectrum['intensity array'])
 
-            ms2class_spectrum = ProteoFileReader.MS2_spectrum(title, rt, pre_mz, pre_int, pre_z, peaks)
-
             frag_methods = [f[0] for f in frag_groups]
 
             if "etd" in frag_methods:
                 if "cid" in frag_methods:
-                    ordered_ms2_spectra['ETciD'].append(ms2class_spectrum)
+                    frag_method = "ETciD"
                 elif "hcd" in frag_methods:
-                    ordered_ms2_spectra['EThcD'].append(ms2class_spectrum)
+                    frag_method = "EThcD"
                 else:
-                    ordered_ms2_spectra['ETD'].append(ms2class_spectrum)
+                    frag_method = "ETD"
             elif "cid" in frag_methods:
-                ordered_ms2_spectra['CID'].append(ms2class_spectrum)
+                frag_method = "CID"
             elif "hcd" in frag_methods:
-                ordered_ms2_spectra['HCD'].append(ms2class_spectrum)
+                frag_method = "HCD"
             else:
-                ordered_ms2_spectra['unknown'].append(ms2class_spectrum)
-    if len(ordered_ms2_spectra['unknown']) > 0:
-        raise Warning("The fragmentation method of %i spectra could not be identified" % len(ordered_ms2_spectra['unknown']))
+                frag_method = 'unknown'
+                unknown_frag_method_count += 1
 
-    return {k: v for k, v in ordered_ms2_spectra.items() if len(v) > 0}
+            ms2class_spectrum = ProteoFileReader.MS2_spectrum(title, rt, pre_mz, pre_int, pre_z, peaks, frag_method, detector_str)
+
+            sorted_ms2_spectra.append(ms2class_spectrum)
+
+    if unknown_frag_method_count > 0:
+        raise Warning("The fragmentation method of %i spectra could not be identified" % unknown_frag_method_count)
+
+    return sorted_ms2_spectra
 
 
 def generate_cihcd_spectra(mzml_file):
@@ -223,11 +223,16 @@ TITLE={}
 PEPMASS={} {}
 CHARGE={}+
 RTINSECONDS={}
+DETECTOR={}
+FRAGMETHOD={}
 {}
 END IONS     """.format(title,
                         spectrum.getPrecursorMass(),
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge), spectrum.getRT(),
+                        int(spectrum.charge),
+                        spectrum.getRT(),
+                        spectrum.getDetector(),
+                        spectrum.getFragMethod(),
                         "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
         else:
             stavrox_mgf = """
@@ -237,17 +242,22 @@ TITLE={}
 PEPMASS={} {}
 CHARGE={}+
 RTINSECONDS={}
+DETECTOR={}
+FRAGMETHOD={}
 {}
 END IONS     """.format(title,
                         spectrum.getPrecursorMass(),
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge), spectrum.getRT(),
+                        int(spectrum.charge),
+                        spectrum.getRT(),
+                        spectrum.getDetector(),
+                        spectrum.getFragMethod(),
                         "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
                                    spectrum.peaks[1][i] > 0]))
         out_writer.write(stavrox_mgf)
 
 
-def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=True): #TODO implement option further up
+def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=False): # TODO: implement option further up
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -265,11 +275,12 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
         write_mgf(spectra=cihcd_spectra, outfile=os.path.join(outdir, 'CIhcD_ms3_' + filename[:filename.rfind('.')] + '.mgf'))
 
     if split_acq:
-        splitted_spectra = split_mzml(mzml_file, detector_filter)
+        split_spectra = mzml_to_MS2_spectra(mzml_file, detector_filter)
 
-        for acq in splitted_spectra:
-            write_mgf(spectra=splitted_spectra[acq],
-                      outfile=os.path.join(outdir, acq + '_' + filename[:filename.rfind('.')]+'.mgf'))
+        write_mgf(
+            spectra=split_spectra,
+            outfile=os.path.join(outdir, acq + '_' + filename[:filename.rfind('.')]+'.mgf')
+        )
 
 
 if __name__ == '__main__':
