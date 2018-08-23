@@ -227,7 +227,7 @@ DETECTOR={}
 FRAGMETHOD={}
 {}
 END IONS     """.format(title,
-                        spectrum.getPrecursorMass(),
+                        spectrum.getPrecursorMZ(),
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
                         int(spectrum.charge),
                         spectrum.getRT(),
@@ -246,7 +246,7 @@ DETECTOR={}
 FRAGMETHOD={}
 {}
 END IONS     """.format(title,
-                        spectrum.getPrecursorMass(),
+                        spectrum.getPrecursorMZ(),
                         spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
                         int(spectrum.charge),
                         spectrum.getRT(),
