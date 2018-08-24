@@ -143,10 +143,11 @@ def split_mgf_methods(mgf_in_file):
     for method in methods:
         split_spectra = [spectrum for spectrum in ms2_spectra if spectrum.getFragMethod() == method]
 
-        out_file_name = '%s_%s' % (method, os.path.split(mgf_in_file)[1])
-        out_file_path = os.path.join(os.path.split(mgf_in_file)[0], out_file_name)
+        if len(split_spectra) > 0:
+            out_file_name = '%s_%s' % (method, os.path.split(mgf_in_file)[1])
+            out_file_path = os.path.join(os.path.split(mgf_in_file)[0], out_file_name)
 
-        write_mgf(split_spectra, out_file_path)
+            write_mgf(split_spectra, out_file_path)
 
 
 def mzMLReader(in_file):
