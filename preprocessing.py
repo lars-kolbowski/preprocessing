@@ -282,7 +282,7 @@ if __name__ == '__main__':
         # pool.close()
         # pool.join()
 
-        mgf_file_list = [os.path.split(x)[0] + 'recal_' + os.path.split(x)[1] for x in mgf_file_list]
+        mgf_file_list = [os.path.join(os.path.split(x)[0], 'recal_' + os.path.split(x)[1]) for x in mgf_file_list]
 
     if split_acq:
         for mgf_file in mgf_file_list:
