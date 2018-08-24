@@ -67,41 +67,13 @@ def adjust_prec_mz(mgf_file, error, outpath):
         os.makedirs(outpath)
     elif os.path.isfile(outfile):
         return
-    exp = ProteoFileReader.MGF_Reader()
-    exp.load(mgf_file)
 
-    out_writer = open(os.path.join(outfile), "w")
-    for spectrum in exp:
-        prec_mz_new = spectrum.getPrecursorMZ()/(1-error/10.**6)
-        if sys.version_info.major < 3:
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-{}
-END IONS     """.format(spectrum.getTitle(),
-                            prec_mz_new, spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                                int(spectrum.charge), spectrum.getRT(),
-                                "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
-        else:
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-{}
-END IONS     """.format(spectrum.getTitle(),
-                        prec_mz_new,
-                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge), spectrum.getRT(),
-                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
-                             spectrum.peaks[1][i] > 0]))
-        out_writer.write(stavrox_mgf)
+    ms2_spectra = ProteoFileReader.read_mgf(mgf_file)
+
+    for spectrum in ms2_spectra:
+        spectrum.pepmz = spectrum.getPrecursorMZ() / (1 - error / 10.0 ** 6)
+
+    ProteoFileReader.write_mgf(ms2_spectra, outpath)
 
 
 def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.739.jar', val_input=None):
