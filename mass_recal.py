@@ -97,7 +97,7 @@ def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.
         ms1_err = ms1_input[ms1_input.index.str.contains('_'.join(filename.split('_')[1:]))].values[0][0]
 
     if ms1_err is not None:     # shift all old m/z by value
-        adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath))
+        adjust_prec_mz(mgf_file=mgf, error=ms1_err, out_path=os.path.join(outpath))
 
 
 if __name__ == '__main__':
