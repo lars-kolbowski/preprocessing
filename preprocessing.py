@@ -1,5 +1,4 @@
 import os
-import numpy as np
 import subprocess
 from multiprocessing import Pool
 import sys
@@ -234,7 +233,7 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
 
 
 if __name__ == '__main__':
-    # read cmdline arguments / get deafult values
+    # read cmdline arguments / get default values
     input_arg, outdir, config_path, recal_conf, recal = read_cmdline()
     try:
         execfile(config_path)
@@ -261,14 +260,14 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
 
-    recal_in = [os.path.join(outdir, x) for x in os.listdir(outdir) if '.mgf' in x]
+    mgf_file_list = [os.path.join(outdir, x) for x in os.listdir(outdir) if '.mgf' in x]
     if recal:
         # pool = Pool(processes=nthr)
         if not os.path.exists(outdir):
             os.makedirs(outdir)
         output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
         # TODO change to parallel with manual input of error
-        for inputfile in recal_in:
+        for inputfile in mgf_file_list:
             if 'ms3' in os.path.split(inputfile)[1]:
                 continue
             mass_recal.main(fasta=recal_conf['db'], xi_cnf=recal_conf['xiconf'], outpath=outdir,
@@ -282,3 +281,11 @@ if __name__ == '__main__':
         #                  xi_jar=xi_offline), recal_in)
         # pool.close()
         # pool.join()
+
+        mgf_file_list = [os.path.split(x)[0] + 'recal_' + os.path.split(x)[1] for x in mgf_file_list]
+
+    if split_acq:
+        for mgf_file in mgf_file_list:
+            ProteoFileReader.split_mgf_methods(mgf_file)
+
+

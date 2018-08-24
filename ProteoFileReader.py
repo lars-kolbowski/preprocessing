@@ -129,6 +129,22 @@ END IONS""".format(title,
         out_writer.write(stavrox_mgf)
 
 
+def split_mgf_methods(mgf_in_file):
+    ms2_spectra = read_mgf(mgf_in_file)
+
+    methods = [
+        "CID",
+        "HCD",
+        "ETD",
+        "ETciD",
+        "EThcD"
+    ]
+
+    for method in methods:
+        split_spectra = [spectrum for spectrum in ms2_spectra if spectrum.getFragMethod() == method]
+        out_file_path = os.path.split(mgf_in_file)[0] + method + '_' + os.path.split(mgf_in_file)[1]
+        write_mgf(split_spectra, out_file_path)
+
 
 def mzMLReader(in_file):
     """
