@@ -207,64 +207,6 @@ def mscon_cmd(filepath, outdir, settings, mgf):
     return cmd_list
 
 
-def write_mgf(spectra, outfile):
-    out_writer = open(os.path.join(outfile), "w")
-    for spectrum in spectra:
-        title = spectrum.getTitle()
-        # scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
-        # try:
-        #     title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
-        # except AttributeError:
-        #     title = re.match('[0-9]{8}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
-        # title = '.'.join([title, scan, scan, str(int(spectrum.charge))])
-        if 'ms2_scanId' in spectrum.getTitle():
-            try:
-                ms2_parent = re.search('ms2_scanId=.*scan=([0-9]+)', spectrum.getTitle()).groups()[0]
-            except AttributeError:
-                ms2_parent = 0
-            title += ' ms2_scanId=%s' % ms2_parent
-        if sys.version_info.major < 3:
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-DETECTOR={}
-FRAGMETHOD={}
-{}
-END IONS     """.format(title,
-                        spectrum.getPrecursorMZ(),
-                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge),
-                        spectrum.getRT(),
-                        spectrum.getDetector(),
-                        spectrum.getFragMethod(),
-                        "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
-        else:
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-DETECTOR={}
-FRAGMETHOD={}
-{}
-END IONS     """.format(title,
-                        spectrum.getPrecursorMZ(),
-                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge),
-                        spectrum.getRT(),
-                        spectrum.getDetector(),
-                        spectrum.getFragMethod(),
-                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
-                                   spectrum.peaks[1][i] > 0]))
-        out_writer.write(stavrox_mgf)
-
-
 def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=False): # TODO: implement option further up
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -280,12 +222,12 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
 
     if cihcd_ms3:
         cihcd_spectra = generate_cihcd_spectra(mzml_file)
-        write_mgf(spectra=cihcd_spectra, outfile=os.path.join(outdir, 'CIhcD_ms3_' + filename[:filename.rfind('.')] + '.mgf'))
+        ProteoFileReader.write_mgf(spectra=cihcd_spectra, outfile=os.path.join(outdir, 'CIhcD_ms3_' + filename[:filename.rfind('.')] + '.mgf'))
 
     if split_acq:
         split_spectra = mzml_to_MS2_spectra(mzml_file, detector_filter)
 
-        write_mgf(
+        ProteoFileReader.write_mgf(
             spectra=split_spectra,
             outfile=os.path.join(outdir, filename[:filename.rfind('.')]+'.mgf')
         )

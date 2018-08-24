@@ -13,6 +13,121 @@ import re
 import numpy as np
 import sys
 import pyopenms as oms
+import io
+import os
+
+
+def read_mgf(mgf_file):
+    mgf_reader = io.open(mgf_file, "r")
+
+    spectra = []
+    peaks = []
+    RT, pep_mz, pep_int, charge, scanID, ms2id = -1, -1, -1, -1, -1, -1
+    title, detector, fragmethod = "", "", ""
+
+    for line in mgf_reader:
+        if len(line.strip()) == 0:
+            continue
+        if re.match("^([0-9.]+)\s([0-9.]+)", line):
+            mz_int_list = re.match('^([0-9.]+)\s([0-9.]+)', line).groups()
+            peaks.append([float(x) for x in mz_int_list])
+        if line.startswith("TITLE"):
+            title = line.replace('TITLE=', '').strip()
+            # scan_match = re.search("^TITLE=[^.]*.([0-9]+).", line)
+            # ms2id_scan_match = re.search("ms2_scanId=([0-9]+)", line)
+            # scanID = int(scan_match.groups()[0])
+            # if ms2id_scan_match:
+            #     ms2id = int(ms2id_scan_match.groups()[0])
+            # else:
+            #     ms2id = -1
+
+        elif line.startswith("RTINSECONDS"):
+            RT = float(re.search("RTINSECONDS=(.*)", line).groups()[0])
+
+        elif line.startswith("PEPMASS"):
+            precursor = re.search("PEPMASS=(.*)", line).groups()[0].split()
+            pep_mz = float(precursor[0])
+            try:
+                pep_int = float(precursor[1])
+            except:
+                pep_int = -1.0
+
+        elif line.startswith("CHARGE"):
+            charge = float(re.search("CHARGE=(-?\d)", line).groups()[0])
+
+        elif line.startswith("DETECTOR"):
+            detector = re.search("DETECTOR=(.*)", line).groups()[0].strip()
+
+        elif line.startswith("FRAGMETHOD"):
+            fragmethod = re.search("FRAGMETHOD=(.*)", line).groups()[0].strip()
+
+        elif "END IONS" in line:
+            spectra.append(
+                MS2_spectrum(title, RT, pep_mz, pep_int, charge, peaks, detector=detector, fragmethod=fragmethod)
+            )
+            peaks = []
+            title, detector, fragmethod = "", "", ""
+            RT, pep_mz, pep_int, charge, scanID, ms2id = -1, -1, -1, -1, -1, -1
+
+    return spectra
+
+
+def write_mgf(spectra, outfile):
+    out_writer = open(os.path.join(outfile), "w")
+    out_writer.write('MASS=Monoisotopic\n')
+    for spectrum in spectra:
+        title = spectrum.getTitle()
+        # scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
+        # try:
+        #     title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        # except AttributeError:
+        #     title = re.match('[0-9]{8}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        # title = '.'.join([title, scan, scan, str(int(spectrum.charge))])
+        if 'ms2_scanId' in spectrum.getTitle():
+            try:
+                ms2_parent = re.search('ms2_scanId=.*scan=([0-9]+)', spectrum.getTitle()).groups()[0]
+            except AttributeError:
+                ms2_parent = 0
+            title += ' ms2_scanId=%s' % ms2_parent
+        if sys.version_info.major < 3:
+            stavrox_mgf = """
+BEGIN IONS
+TITLE={}
+PEPMASS={} {}
+CHARGE={}+
+RTINSECONDS={}
+DETECTOR={}
+FRAGMETHOD={}
+{}
+END IONS""".format(title,
+                        spectrum.getPrecursorMZ(),
+                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                        int(spectrum.charge),
+                        spectrum.getRT(),
+                        spectrum.getDetector(),
+                        spectrum.getFragMethod(),
+                        "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+        else:
+            stavrox_mgf = """
+BEGIN IONS
+TITLE={}
+PEPMASS={} {}
+CHARGE={}+
+RTINSECONDS={}
+DETECTOR={}
+FRAGMETHOD={}
+{}
+END IONS""".format(title,
+                        spectrum.getPrecursorMZ(),
+                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                        int(spectrum.charge),
+                        spectrum.getRT(),
+                        spectrum.getDetector(),
+                        spectrum.getFragMethod(),
+                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
+                                   spectrum.peaks[1][i] > 0]))
+        out_writer.write(stavrox_mgf)
+
 
 
 def mzMLReader(in_file):
@@ -352,6 +467,6 @@ mz=%s
 charge=%s
 %s
 peaklist end
-""" % (ms.title, ms.pepmass, ms.charge, "\r\n".join(["%s %s" % (i, j ) for i,j in ms.peaks]))
+""" % (ms.title, ms.pepmass, ms.charge, "\r\n".join(["%s %s" % (i, j) for i,j in ms.peaks]))
             out_mgf.write(mgf_str)
         out_mgf.close()
