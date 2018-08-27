@@ -99,14 +99,15 @@ RTINSECONDS={}
 DETECTOR={}
 FRAGMETHOD={}
 {}
-END IONS""".format(title,
-                        spectrum.getPrecursorMZ(),
-                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge),
-                        spectrum.getRT(),
-                        spectrum.getDetector(),
-                        spectrum.getFragMethod(),
-                        "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
+END IONS""".format(
+                title,
+                spectrum.getPrecursorMZ(),
+                spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                int(spectrum.charge),
+                spectrum.getRT(),
+                spectrum.getDetector(),
+                spectrum.getFragMethod(),
+                "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
         else:
             stavrox_mgf = """
 BEGIN IONS
@@ -117,15 +118,16 @@ RTINSECONDS={}
 DETECTOR={}
 FRAGMETHOD={}
 {}
-END IONS""".format(title,
-                        spectrum.getPrecursorMZ(),
-                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge),
-                        spectrum.getRT(),
-                        spectrum.getDetector(),
-                        spectrum.getFragMethod(),
-                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
-                                   spectrum.peaks[1][i] > 0]))
+END IONS""".format(
+                title,
+                spectrum.getPrecursorMZ(),
+                spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
+                int(spectrum.charge),
+                spectrum.getRT(),
+                spectrum.getDetector(),
+                spectrum.getFragMethod(),
+                "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
+                           spectrum.peaks[1][i] > 0]))
         out_writer.write(stavrox_mgf)
 
 
