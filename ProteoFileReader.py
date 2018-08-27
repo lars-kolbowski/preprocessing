@@ -256,8 +256,8 @@ class MS2_spectrum():
         return self.detector
 
     def printf(self):
-        print "Title, RT, PEPMASS, PEPINT, CHARGE"
-        print self.title, self.RT, self.pepmz, self.pepint, self.charge
+        print ("Title, RT, PEPMASS, PEPINT, CHARGE")
+        print (self.title, self.RT, self.pepmz, self.pepint, self.charge)
 
     def to_mgf(self):
         # need dummy values in case no peak charges are in the data
