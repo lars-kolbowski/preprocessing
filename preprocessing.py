@@ -247,7 +247,7 @@ END IONS     """.format(title,
         out_writer.write(stavrox_mgf)
 
 
-def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=True): #TODO implement option further up
+def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, mscon_exe, cihcd_ms3=False): #TODO implement option further up
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
