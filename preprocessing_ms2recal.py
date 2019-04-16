@@ -305,7 +305,7 @@ if __name__ == '__main__':
         # pool = Pool(processes=nthr)
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
+        # output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
         # TODO change to parallel with manual input of error
         for inputfile in recal_in:
             if 'ms3' in os.path.split(inputfile)[1]:
@@ -315,8 +315,8 @@ if __name__ == '__main__':
                             val_input=recal_conf['shift_csv']  #'D:/user/Swantje/dsso_ot_it_error/raw/processed_together/ms1_err.csv'
                             )
             # val_input='//130.149.167.198/rappsilbergroup/users/lswantje/DSSO_prepro/xlinkx/processed_wosplit/ms1_err.csv'
-            output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
-                         arcname='recal_' + os.path.split(inputfile)[1])
+            # output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
+            #              arcname='recal_' + os.path.split(inputfile)[1])
             # pool.map(partial(mass_recal.main, fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
         #                  xi_jar=xi_offline), recal_in)
         # pool.close()

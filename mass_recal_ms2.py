@@ -34,8 +34,8 @@ def run_xi_lin(peakfile, fasta, cnf, outpath, xipath, threads='1'):
     xi.communicate()
 
 
-def get_ppm_error(xi_df, outfile):
-    xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)] # TODO: new xi version requires lower score?
+def get_ppm_error(xi_df, peaks_df, outfile):
+    xi_df = xi_df[(xi_df.decoy == 0) & (xi_df['match score'] > 6)]
     median_err = np.median(xi_df['Precoursor Error'])
     try:
         fig, ax = plt.subplots()
@@ -50,18 +50,35 @@ def get_ppm_error(xi_df, outfile):
         print(os.path.split(outfile)[1] + ': Only %s PSMs found. Median error is %s.' % (len(xi_df), median_err))
         err = input('Enter error to correct by (0 for no correction):\n')
         try:
-            err = float(err)
-            if (err != 0):
-                return err
-            elif err == 0:
-                return 0
+            # err = float(err)
+            if (err != '0'):
+                return float(err), 0
+            elif err == '0':
+                return 0, 0
         except ValueError:
-            return 0
+            return 0, 0
 
-    return median_err
+    xi_ms2_df = peaks_df[peaks_df["IsPrimaryMatch"] == 1]
+    xi_ms2_df["MS2Error_ppm"] = (xi_ms2_df["MS2Error"] * 10. ** 6) / xi_ms2_df["CalcMZ"]
+    xi_ms2_df = xi_ms2_df.merge(xi_df[['Scan', 'Run', 'decoy']],
+                                      left_on=['ScanNumber', 'Run'], right_on=['Scan', 'Run'], how='inner')
+    xi_ms2_df = xi_ms2_df[(xi_ms2_df["MS2Error_ppm"] <= 30) & (xi_ms2_df["MS2Error_ppm"] >= -30)]
+    median_err_ms2 = np.median(xi_ms2_df["MS2Error_ppm"])
+
+    fig, ax = plt.subplots()
+    sns.distplot(xi_ms2_df["MS2Error_ppm"], norm_hist=False, kde=False)
+    ax.axvline(median_err_ms2)
+    plt.xlabel("mass error")
+    plt.title("MS2 Error distribution \n median: " + str(median_err_ms2))
+    plt.ylabel("# of identifications")
+    plt.xlim(-20, 20)
+    plt.savefig(os.path.join(outfile.replace('MS1', "MS2")))
+    plt.close()
+
+    return median_err, median_err_ms2
 
 
-def adjust_prec_mz(mgf_file, error, outpath):
+def adjust_prec_mz(mgf_file, ms1_error, ms2_error, outpath):
     outfile = os.path.join(outpath, 'recal_' + os.path.split(mgf_file)[1])
     if not os.path.exists(outpath):
         os.makedirs(outpath)
@@ -72,7 +89,11 @@ def adjust_prec_mz(mgf_file, error, outpath):
 
     out_writer = open(os.path.join(outfile), "w")
     for spectrum in exp:
-        prec_mz_new = spectrum.getPrecursorMass()/(1-error/10.**6)
+        prec_mz_new = spectrum.getPrecursorMass()/(1 + ms1_error / 10. ** 6) # TODO wrong sign if newer version
+        ms2_mass_new = spectrum.getPeaks()
+        for i in range(0, len(ms2_mass_new)):
+            ms2_mass_new[i][0] = ms2_mass_new[i][0] / (1 + ms2_error / 10. ** 6)
+
         if sys.version_info.major < 3:
             stavrox_mgf = """
 MASS=Monoisotopic
@@ -104,7 +125,7 @@ END IONS     """.format(spectrum.getTitle(),
         out_writer.write(stavrox_mgf)
 
 
-def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.739.jar', val_input=None):
+def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.745.jar', val_input=None):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 
@@ -114,8 +135,9 @@ def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.
         run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_jar, threads=threads)
 
         # evaluate results, get median ms1 error
-        ms1_err = get_ppm_error(xi_df=pd.read_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
-                                outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
+        ms1_err, ms2_err = get_ppm_error(xi_df=pd.read_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
+                                         peaks_df=pd.read_csv(os.path.join(outpath, filename.replace('.mgf', '_peaks.csv.gz')), sep='\t', index_col=False, thousands=','),
+                                         outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
 
         error_file = open(outpath + '/ms1_err.csv', 'a')
         error_file.write(filename + ',' + str(ms1_err) + '\n')
@@ -125,7 +147,7 @@ def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.
         ms1_err = ms1_input[ms1_input.index.str.contains('_'.join(filename.split('_')[1:]))].values[0][0]
 
     if ms1_err is not None: # shift all old m/z by value
-        adjust_prec_mz(mgf_file=mgf, error=ms1_err, outpath=os.path.join(outpath))
+        adjust_prec_mz(mgf_file=mgf, ms1_error=ms1_err, ms2_error=ms2_err, outpath=os.path.join(outpath))
 
 
 if __name__ == '__main__':
