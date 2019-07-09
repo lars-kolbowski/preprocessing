@@ -76,7 +76,7 @@ def adjust_prec_mz(mgf_file, error, out_path):
     ProteoFileReader.write_mgf(ms2_spectra, outfile)
 
 
-def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.739.jar', val_input=None):
+def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.745.jar', val_input=None):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 

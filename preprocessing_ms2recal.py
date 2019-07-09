@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import subprocess
 from multiprocessing import Pool
 import sys
@@ -7,7 +8,7 @@ import getopt
 from pyteomics import mzml
 from functools import partial
 import ProteoFileReader
-import mass_recal
+import mass_recal_ms2
 import zipfile
 
 
@@ -68,24 +69,29 @@ def read_cmdline():
     return input_arg, outdir, config, recal_conf, recal
 
 
-def mzml_to_MS2_spectra(mzml_file, detector_filter="all"):
+def split_mzml(mzml_file, detector="all"):
     """
-    function to split a mzML file into a list of MS2_Spectra objects (can be written to mgf format)
-    with fragmentation method and detector type
+    function to split a mzML file into dict of MS2_Spectra objects (can be written to mgf format)
+    by fragmentation method
 
     Parameters:
     -----------------------------------------
     mzml_file: str,
             path to mzML file
-    detector_filter: filter scans by detector type ('all', 'FT', 'IT')
 
-    Return: list(MS2_spectrum)
+    Return: dict {fragMethod: list(MS2_spectrum)
 
     """
 
     mzml_reader = mzml.read(mzml_file)
-    sorted_ms2_spectra = []
-    unknown_frag_method_count = 0
+    ordered_ms2_spectra = {
+        "CID": [],
+        "HCD": [],
+        "ETD": [],
+        "ETciD": [],
+        "EThcD": [],
+        "unknown": []
+    }
 
     n = 0
     for spectrum in mzml_reader:
@@ -98,8 +104,8 @@ def mzml_to_MS2_spectra(mzml_file, detector_filter="all"):
             except AttributeError:
                 raise StandardError("filter string parse error: %s" % filter_str)
 
-            if not detector_filter == "all":
-                if not detector_filter == detector_str:
+            if not detector == "all":
+                if not detector == detector_str:
                     continue
 
             title = os.path.split(mzml_file)[1].split('.mzML')[0] + " " + spectrum['id']
@@ -113,40 +119,27 @@ def mzml_to_MS2_spectra(mzml_file, detector_filter="all"):
             pre_z = precursor['charge state']
             peaks = zip(spectrum['m/z array'], spectrum['intensity array'])
 
+            ms2class_spectrum = ProteoFileReader.MS2_spectrum(title, rt, pre_mz, pre_int, pre_z, peaks)
+
             frag_methods = [f[0] for f in frag_groups]
 
             if "etd" in frag_methods:
                 if "cid" in frag_methods:
-                    frag_method = "ETciD"
+                    ordered_ms2_spectra['ETciD'].append(ms2class_spectrum)
                 elif "hcd" in frag_methods:
-                    frag_method = "EThcD"
+                    ordered_ms2_spectra['EThcD'].append(ms2class_spectrum)
                 else:
-                    frag_method = "ETD"
+                    ordered_ms2_spectra['ETD'].append(ms2class_spectrum)
             elif "cid" in frag_methods:
-                frag_method = "CID"
+                ordered_ms2_spectra['CID'].append(ms2class_spectrum)
             elif "hcd" in frag_methods:
-                frag_method = "HCD"
+                ordered_ms2_spectra['HCD'].append(ms2class_spectrum)
             else:
-                frag_method = 'unknown'
-                unknown_frag_method_count += 1
+                ordered_ms2_spectra['unknown'].append(ms2class_spectrum)
+    if len(ordered_ms2_spectra['unknown']) > 0:
+        raise Warning("The fragmentation method of %i spectra could not be identified" % len(ordered_ms2_spectra['unknown']))
 
-            ms2class_spectrum = ProteoFileReader.MS2_spectrum(
-                title,
-                rt,
-                pre_mz,
-                pre_int,
-                pre_z,
-                peaks,
-                detector=detector_str,
-                fragmethod=frag_method
-            )
-
-            sorted_ms2_spectra.append(ms2class_spectrum)
-
-    if unknown_frag_method_count > 0:
-        raise Warning("The fragmentation method of %i spectra could not be identified" % unknown_frag_method_count)
-
-    return sorted_ms2_spectra
+    return {k: v for k, v in ordered_ms2_spectra.items() if len(v) > 0}
 
 
 def generate_cihcd_spectra(mzml_file):
@@ -269,19 +262,18 @@ def process_file(filepath, outdir, mscon_settings, split_acq, detector_filter, m
 
     if cihcd_ms3:
         cihcd_spectra = generate_cihcd_spectra(mzml_file)
-        ProteoFileReader.write_mgf(spectra=cihcd_spectra, outfile=os.path.join(outdir, 'CIhcD_ms3_' + filename[:filename.rfind('.')] + '.mgf'))
+        write_mgf(spectra=cihcd_spectra, outfile=os.path.join(outdir, 'CIhcD_ms3_' + filename[:filename.rfind('.')] + '.mgf'))
 
     if split_acq:
-        split_spectra = mzml_to_MS2_spectra(mzml_file, detector_filter)
+        splitted_spectra = split_mzml(mzml_file, detector_filter)
 
-        ProteoFileReader.write_mgf(
-            spectra=split_spectra,
-            outfile=os.path.join(outdir, filename[:filename.rfind('.')]+'.mgf')
-        )
+        for acq in splitted_spectra:
+            write_mgf(spectra=splitted_spectra[acq],
+                      outfile=os.path.join(outdir, acq + '_' + filename[:filename.rfind('.')]+'.mgf'))
 
 
 if __name__ == '__main__':
-    # read cmdline arguments / get default values
+    # read cmdline arguments / get deafult values
     input_arg, outdir, config_path, recal_conf, recal = read_cmdline()
     try:
         execfile(config_path)
@@ -308,32 +300,24 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
 
-    mgf_file_list = [os.path.join(outdir, x) for x in os.listdir(outdir) if '.mgf' in x]
+    recal_in = [os.path.join(outdir, x) for x in os.listdir(outdir) if '.mgf' in x]
     if recal:
         # pool = Pool(processes=nthr)
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
+        # output = zipfile.ZipFile(outdir + '/recalibrated_files.zip', 'w', zipfile.ZIP_DEFLATED)
         # TODO change to parallel with manual input of error
-        for inputfile in mgf_file_list:
+        for inputfile in recal_in:
             if 'ms3' in os.path.split(inputfile)[1]:
                 continue
-            mass_recal.main(fasta=recal_conf['db'], xi_cnf=recal_conf['xiconf'], outpath=outdir,
+            mass_recal_ms2.main(fasta=recal_conf['db'], xi_cnf=recal_conf['xiconf'], outpath=outdir,
                             mgf=inputfile, threads=str(nthr),
                             val_input=recal_conf['shift_csv']  #'D:/user/Swantje/dsso_ot_it_error/raw/processed_together/ms1_err.csv'
                             )
             # val_input='//130.149.167.198/rappsilbergroup/users/lswantje/DSSO_prepro/xlinkx/processed_wosplit/ms1_err.csv'
-            output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
-                         arcname='recal_' + os.path.split(inputfile)[1])
+            # output.write(os.path.join(outdir, 'recal_' + os.path.split(inputfile)[1]),
+            #              arcname='recal_' + os.path.split(inputfile)[1])
             # pool.map(partial(mass_recal.main, fasta=database, xi_cnf=xi_recal_config, outpath=outdir + '/recal',
         #                  xi_jar=xi_offline), recal_in)
         # pool.close()
         # pool.join()
-
-        mgf_file_list = [os.path.join(os.path.split(x)[0], 'recal_' + os.path.split(x)[1]) for x in mgf_file_list]
-
-    if split_acq:
-        for mgf_file in mgf_file_list:
-            ProteoFileReader.split_mgf_methods(mgf_file)
-
-
