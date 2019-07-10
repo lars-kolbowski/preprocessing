@@ -51,7 +51,7 @@ def get_ppm_error(xi_df, peaks_df, outfile):
         err = input('Enter error to correct by (0 for no correction):\n')
         try:
             # err = float(err)
-            if (err != '0'):
+            if err != '0':
                 return float(err), 0
             elif err == '0':
                 return 0, 0
@@ -83,46 +83,21 @@ def adjust_prec_mz(mgf_file, ms1_error, ms2_error, outpath):
     if not os.path.exists(outpath):
         os.makedirs(outpath)
     elif os.path.isfile(outfile):
-        return
-    exp = ProteoFileReader.MGF_Reader()
-    exp.load(mgf_file)
+        raise Exception('File %s already exists!' % outfile)
+    ms2_spectra = ProteoFileReader.read_mgf(mgf_file)
 
-    out_writer = open(os.path.join(outfile), "w")
-    for spectrum in exp:
-        prec_mz_new = spectrum.getPrecursorMass()/(1 + ms1_error / 10. ** 6) # TODO wrong sign if newer version
-        ms2_mass_new = spectrum.getPeaks()
-        for i in range(0, len(ms2_mass_new)):
-            ms2_mass_new[i][0] = ms2_mass_new[i][0] / (1 + ms2_error / 10. ** 6)
+    for spectrum in ms2_spectra:
+        # ms1/precursor correction
+        spectrum.pepmz = spectrum.getPrecursorMZ() / (1 + ms1_error / 10.0 ** 6)  # TODO wrong sign if newer version
 
-        if sys.version_info.major < 3:
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-{}
-END IONS     """.format(spectrum.getTitle(),
-                            prec_mz_new, spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                                int(spectrum.charge), spectrum.getRT(),
-                                "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
-        else:
-            stavrox_mgf = """
-MASS=Monoisotopic
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-{}
-END IONS     """.format(spectrum.getTitle(),
-                        prec_mz_new,
-                        spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                        int(spectrum.charge), spectrum.getRT(),
-                        "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
-                             spectrum.peaks[1][i] > 0]))
-        out_writer.write(stavrox_mgf)
+        # ms2 peak correction
+        ms2_peaks = spectrum.getPeaks()
+        for i in range(0, len(ms2_peaks)):
+            ms2_peaks[i][0] = ms2_peaks[i][0] / (1 + ms2_error / 10. ** 6)
+
+        spectrum.peaks = ms2_peaks
+
+    ProteoFileReader.write_mgf(ms2_spectra, outfile)
 
 
 def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.745.jar', val_input=None):
@@ -134,9 +109,11 @@ def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.
         # linear small search in Xi
         run_xi_lin(peakfile=mgf, fasta=fasta, cnf=xi_cnf, outpath=os.path.join(outpath), xipath=xi_jar, threads=threads)
 
+        xi_df = pd.read_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv')))
+        peaks_df = pd.read_csv(os.path.join(outpath, filename.replace('.mgf', '_peaks.csv.gz')),
+                               sep='\t', index_col=False, thousands=',')
         # evaluate results, get median ms1 error
-        ms1_err, ms2_err = get_ppm_error(xi_df=pd.read_csv(os.path.join(outpath, 'xi_' + filename.replace('.mgf', '.csv'))),
-                                         peaks_df=pd.read_csv(os.path.join(outpath, filename.replace('.mgf', '_peaks.csv.gz')), sep='\t', index_col=False, thousands=','),
+        ms1_err, ms2_err = get_ppm_error(xi_df=xi_df, peaks_df=peaks_df,
                                          outfile=os.path.join(outpath, 'MS1_err_' + filename + '.png'))
 
         error_file = open(outpath + '/ms1_err.csv', 'a')
@@ -145,20 +122,7 @@ def main(mgf, fasta, xi_cnf, outpath, threads, xi_jar='./resources/XiSearch_1.6.
     else:
         ms1_input = pd.read_csv(val_input, header=None, index_col=0)
         ms1_err = ms1_input[ms1_input.index.str.contains('_'.join(filename.split('_')[1:]))].values[0][0]
+        ms2_err = 0  # ToDo val input for ms2 error?
 
-    if ms1_err is not None: # shift all old m/z by value
+    if ms1_err is not None:  # shift all old m/z by value
         adjust_prec_mz(mgf_file=mgf, ms1_error=ms1_err, ms2_error=ms2_err, outpath=os.path.join(outpath))
-
-
-if __name__ == '__main__':
-    base_dir = '//130.149.167.198/rappsilbergroup/users/lswantje/prepro_mito/tryp/new/mgf'
-    mgf_dir = base_dir
-    fasta = '//130.149.167.198/rappsilbergroup/users/MitoProject/For Swantje/20170109_uniprot_mitoIDrun_FASTA.fasta'
-    outpath = base_dir + '/error_shift'
-    for in_file in os.listdir(mgf_dir):
-        if '.mgf' in in_file:
-            main(mgf=os.path.join(mgf_dir, in_file),
-                 fasta=fasta,
-                 xi_cnf='D:/user/Swantje/projects/pipeline_prepro_xi_fdr/resources/xi_linear_by_tryp.conf',
-                 outpath=outpath,
-                 xi_jar='D:/user/Swantje/XiSearch_1.6.731')

@@ -66,7 +66,7 @@ def adjust_prec_mz(mgf_file, error, out_path):
     if not os.path.exists(out_path):
         os.makedirs(out_path)
     elif os.path.isfile(outfile):
-        raise StandardError('File %s already exists!' % outfile)
+        raise Exception('File %s already exists!' % outfile)
 
     ms2_spectra = ProteoFileReader.read_mgf(mgf_file)
 

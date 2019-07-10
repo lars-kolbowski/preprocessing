@@ -24,14 +24,15 @@ def read_mgf(mgf_file):
     peaks = []
     RT, pep_mz, pep_int, charge, scanID, ms2id = -1, -1, -1, -1, -1, -1
     title, detector, fragmethod = "", "", ""
+    peak_re = re.compile(r'^([0-9.e+\-]+)\s([0-9.e+\-]+)')
 
     for line in mgf_reader:
         if len(line.strip()) == 0:
             continue
-        if re.match("^([0-9.]+)\s([0-9.]+)", line):
-            mz_int_list = re.match('^([0-9.]+)\s([0-9.]+)', line).groups()
+        if re.match(peak_re, line):
+            mz_int_list = re.match(peak_re, line).groups()
             peaks.append([float(x) for x in mz_int_list])
-        if line.startswith("TITLE"):
+        elif line.startswith("TITLE"):
             title = line.replace('TITLE=', '').strip()
             # scan_match = re.search("^TITLE=[^.]*.([0-9]+).", line)
             # ms2id_scan_match = re.search("ms2_scanId=([0-9]+)", line)
@@ -77,11 +78,11 @@ def write_mgf(spectra, outfile):
     out_writer.write('MASS=Monoisotopic\n')
     for spectrum in spectra:
         title = spectrum.getTitle()
-        # scan = re.search('scan=[0-9]*', spectrum.getTitle()).group(0)[5:]
+        # scan = re.search('scan=[0-9]*', title).group(0)[5:]
         # try:
-        #     title = re.match('(B|E)[0-9]{6}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        #     title = re.match('([A-Z])[0-9]{6}_[0-9]{2}.+?( )', title).group(0)[:-1]
         # except AttributeError:
-        #     title = re.match('[0-9]{8}_[0-9]{2}.+?( )', spectrum.getTitle()).group(0)[:-1]
+        #     title = re.match('[0-9]{8}_[0-9]{2}.+?( )', title).group(0)[:-1]
         # title = '.'.join([title, scan, scan, str(int(spectrum.charge))])
         if 'ms2_scanId' in spectrum.getTitle():
             try:
@@ -89,8 +90,7 @@ def write_mgf(spectra, outfile):
             except AttributeError:
                 ms2_parent = 0
             title += ' ms2_scanId=%s' % ms2_parent
-        if sys.version_info.major < 3:
-            stavrox_mgf = """
+        stavrox_mgf = """
 BEGIN IONS
 TITLE={}
 PEPMASS={} {}
@@ -107,27 +107,8 @@ END IONS""".format(
                 spectrum.getRT(),
                 spectrum.getDetector(),
                 spectrum.getFragMethod(),
-                "\n".join(["%s %s" % (i[0], i[1]) for i in spectrum.peaks if i[1] > 0]))
-        else:
-            stavrox_mgf = """
-BEGIN IONS
-TITLE={}
-PEPMASS={} {}
-CHARGE={}+
-RTINSECONDS={}
-DETECTOR={}
-FRAGMETHOD={}
-{}
-END IONS""".format(
-                title,
-                spectrum.getPrecursorMZ(),
-                spectrum.getPrecursorIntensity() if spectrum.getPrecursorIntensity() > 0 else 0,
-                int(spectrum.charge),
-                spectrum.getRT(),
-                spectrum.getDetector(),
-                spectrum.getFragMethod(),
-                "\n".join(["%s %s" % (mz, spectrum.peaks[1][i]) for i, mz in enumerate(spectrum.peaks[0]) if
-                           spectrum.peaks[1][i] > 0]))
+                "\n".join([f"{mz} {i}" for mz, i in spectrum.peaks if i > 0])
+            )
         out_writer.write(stavrox_mgf)
 
 
